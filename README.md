@@ -1,1 +1,1 @@
-# Data Science Project 1
+# Predicting Apartment Rental Prices in Switzerland Using Machine
