@@ -1,17 +1,14 @@
 use std::io;
 
-use rand::{rng, seq::IndexedRandom};
-use reqwest::{Client, ClientBuilder, Proxy};
-
 use crate::scraper::{pool::ClientPool, proxy::Proxies, useragent::UserAgents};
 
+pub mod pool;
 pub mod proxy;
 pub mod useragent;
-pub mod pool;
 
-trait Scraper {
-  fn new(proxy_file: &str, useragents_file: &str) -> Result<ScrapeGoat, io::Error>;
-  async fn get_page(&self, url: &str) -> Result<String, reqwest::Error>;
+pub trait Scraper {
+  fn new(proxy_file: &str, useragents_file: &str, max_concurrent: usize) -> Result<ScrapeGoat, io::Error>;
+  async fn get_page(&mut self, url: &str) -> Result<String, Error>;
 }
 
 pub struct ScrapeGoat {
@@ -19,23 +16,46 @@ pub struct ScrapeGoat {
   pool: ClientPool, // client list
 }
 
+pub struct Error {
+  pub status: u16,
+  pub msg: String,
+}
+impl Error {
+  pub fn new(status: u16, msg: String) -> Self {
+    Self { status, msg }
+  }
+}
+
 impl Scraper for ScrapeGoat {
-  fn new(proxy_file: &str, useragents_file: &str) -> Result<Self, io::Error> {
+  fn new(proxy_file: &str, useragents_file: &str, max_concurrent: usize) -> Result<Self, io::Error> {
     let proxies = Proxies::new(proxy_file)?;
     let user_agents = UserAgents::new(useragents_file)?;
 
     Ok(Self {
       user_agents,
-      pool: ClientPool::new(proxies),
+      pool: ClientPool::new(proxies, max_concurrent),
     })
   }
 
+  async fn get_page(&mut self, url: &str) -> Result<String, Error> {
+    // fetch client or error if no permit
+    let Ok(client) = self.pool.get() else {
+      return Err(Error::new(500, "no permit".to_string()));
+    };
 
+    // get page / throw err?
+    let res = match client
+      .get(url)
+      .header("User-Agent", self.user_agents.get_agent())
+      .send()
+      .await
+    {
+      Ok(r) => Ok(r.text().await.expect("text not texting?")),
+      Err(e) => Err(Error::new(e.status().unwrap().as_u16(), e.to_string())),
+    };
 
-  async fn get_page(&self, url: &str) -> Result<String, reqwest::Error> {
-    let client = self.clients.choose(&mut rng()).unwrap();
+    _ = self.pool.drop(); // can be ignored? idk
 
-    let res = client.get(url).header("User-Agent", self.user_agents.get_agent()).send().await?;
-    Ok(res.text().await.unwrap())
+    res
   }
 }

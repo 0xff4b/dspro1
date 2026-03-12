@@ -1,13 +1,10 @@
 use reqwest::{Client, Proxy};
-
 use crate::scraper::proxy::Proxies;
-
-const MAX_CONCURRENT: usize = 20;
 
 pub struct ClientPool {
   permits: Permits,
   clients: Vec<Client>,
-  current_idx: usize
+  idx: usize,
 }
 
 impl ClientPool {
@@ -22,11 +19,25 @@ impl ClientPool {
       })
       .collect();
 
-    Self { clients, permits: Permits::new(max_concurrent) }
+    Self {
+      clients,
+      permits: Permits::new(max_concurrent),
+      idx: 0,
+    }
   }
 
-  pub fn get() -> Result<Client, NoPermitError> {
-    todo!()
+  pub fn get(&mut self) -> Result<&Client, NoPermitError> {
+    self.permits.get()?; // reserve permit
+
+    self.idx = self.idx+1 % self.clients.len();
+    Ok(&self.clients[self.idx])
+  }
+
+  // return permit
+  pub fn drop(&mut self) -> Result<(), NoPermitError> {
+    self.permits.drop()?;
+
+    Ok(())
   }
 }
 
@@ -34,8 +45,7 @@ struct Permits {
   issued_permits: usize,
   max_permits: usize,
 }
-
-struct NoPermitError {}
+pub struct NoPermitError;
 
 impl Permits {
   pub fn new(max_permits: usize) -> Self {
@@ -49,6 +59,7 @@ impl Permits {
     if self.issued_permits == self.max_permits {
       return Err(NoPermitError {});
     }
+
     self.issued_permits += 1;
     Ok(())
   }
