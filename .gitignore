@@ -1,3 +1,6 @@
+# Testing own stuff
+src/notebooks/
+
 .env
 
 target/
