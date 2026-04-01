@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 scrapegoat = { path = "../scrapegoat" }
 scraper = "0.25.0"
+tokio = { version = "1.50.0", features = ["full"] }

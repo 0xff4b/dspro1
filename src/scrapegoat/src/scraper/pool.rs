@@ -1,5 +1,5 @@
-use reqwest::{Client, Proxy};
 use crate::scraper::proxy::Proxies;
+use reqwest::{Client, Proxy};
 
 pub struct ClientPool {
   permits: Permits,
@@ -9,15 +9,22 @@ pub struct ClientPool {
 
 impl ClientPool {
   pub fn new(proxies: Proxies, max_concurrent: usize) -> Self {
-    // build a client per proxy
-    let clients = proxies
-      .map(|p| {
-        Client::builder()
-          .proxy(Proxy::all(p).unwrap())
-          .build()
-          .unwrap()
-      })
-      .collect();
+    let clients: Vec<Client>;
+    if proxies.len() == 0 {
+      clients = (0..max_concurrent)
+        .map(|c| Client::builder().build().unwrap())
+        .collect();
+    } else {
+      // build a client per proxy
+      clients = proxies
+        .map(|p| {
+          Client::builder()
+            .proxy(Proxy::all(p).unwrap())
+            .build()
+            .unwrap()
+        })
+        .collect();
+    }
 
     Self {
       clients,
@@ -29,7 +36,7 @@ impl ClientPool {
   pub fn get(&mut self) -> Result<&Client, NoPermitError> {
     self.permits.get()?; // reserve permit
 
-    self.idx = self.idx+1 % self.clients.len();
+    self.idx = (self.idx + 1) % self.clients.len();
     Ok(&self.clients[self.idx])
   }
 

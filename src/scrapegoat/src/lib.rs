@@ -2,6 +2,8 @@ mod scraper;
 
 use std::io;
 
+use reqwest::StatusCode;
+
 use crate::scraper::{pool::ClientPool, proxy::Proxies, useragent::UserAgents};
 
 pub struct ScrapeGoat {
@@ -9,6 +11,7 @@ pub struct ScrapeGoat {
   pool: ClientPool, // client list
 }
 
+#[derive(Debug)]
 pub struct Error {
   pub status: u16,
   pub msg: String,
@@ -39,6 +42,8 @@ impl ScrapeGoat {
       return Err(Error::new(500, "no permit".to_string()));
     };
 
+    println!("{:?}", client);
+
     // get page / throw err?
     let res = match client
       .get(url)
@@ -47,7 +52,7 @@ impl ScrapeGoat {
       .await
     {
       Ok(r) => Ok(r.text().await.expect("text not texting?")),
-      Err(e) => Err(Error::new(e.status().unwrap().as_u16(), e.to_string())),
+      Err(e) => Err(Error::new(e.status().unwrap_or(StatusCode::from_u16(500).unwrap()).as_u16(), e.to_string())),
     };
 
     _ = self.pool.drop(); // return permit

@@ -14,8 +14,8 @@ impl Proxies {
     Ok(Proxies { proxies, idx: 0 })
   }
 
-  pub fn get_proxy(&self) -> &String {
-    self.proxies.choose(&mut rng()).unwrap()
+  pub fn len(&self) -> usize {
+    return self.proxies.len();
   }
 }
 
