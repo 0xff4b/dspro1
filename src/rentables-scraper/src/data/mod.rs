@@ -6,15 +6,21 @@ use std::str::FromStr;
 #[derive(Debug, Default)]
 pub struct ListingData {
   pub slug: String,
-  pub rooms: u16,
-  pub m_sqrd: u32,
-  pub price_cold: u32,
-  // from details page
-  // pub address: String,
-  // pub desc: String,
-  // pub floor: u8,
-  // pub auxiliary_costs: u32,
-  // pub kaution: u32,
+  pub rooms: i32,
+  pub m_sqrd: i32,
+  pub price_cold: i32,
+}
+
+#[derive(Debug, Default)]
+pub struct ListingDetails {
+  pub address: Option<String>,
+  pub price_cold: Option<i32>,
+  pub area_sqm: Option<i32>,
+  pub rooms: Option<i32>,
+  pub auxiliary_costs: Option<i32>,
+  pub kaution: Option<i32>,
+  pub description: Option<String>,
+  pub available_from: Option<String>,
 }
 
 pub fn parse_field<T: FromStr + Default, F: Fn(&str) -> String>(

@@ -1,0 +1,1 @@
+ALTER TABLE listing_details ALTER COLUMN rooms TYPE INTEGER;

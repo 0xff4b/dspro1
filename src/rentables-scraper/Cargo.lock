@@ -1643,6 +1643,8 @@ dependencies = [
  "dotenv",
  "scrapegoat",
  "scraper",
+ "serde",
+ "serde_json",
  "sqlx",
  "tokio",
 ]
