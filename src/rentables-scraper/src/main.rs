@@ -1,52 +1,97 @@
-use std::{
-    fs::{File, read_to_string},
-    io::Write,
-};
-
+use dotenv::dotenv;
 use scrapegoat::ScrapeGoat;
-use scraper::{ElementRef, Html, Selector};
+use scraper::{Html, Selector};
+use std::sync::Arc;
+
+use crate::data::db::Db;
+use crate::data::{ListingData, parse_field};
+use crate::mgt::Mgt;
 
 mod data;
+mod mgt;
 
-const PAGE_LIMIT: u16 = 375;
-/*
-get all mehr sehen links
-r#"#listings > div > div > div.bg-white.xl\:px-5.px-4.xl\:pt-3\.5.xl\:pb-3\.5.pt-2\.5.pb-2\.5 > div > a.text-sm.font-bold.block.text-center.text-blue_reg"#
+fn parse_listings(html: &str) -> Vec<ListingData> {
+  let html = Html::parse_document(html);
 
-get all listing items
-r#"#listings > div"# ?
-
-*/
-
-
-// #[tokio::main]
-// async fn main() {
-//   let mut scraper = ScrapeGoat::new("./proxies.txt", "./user_agents.txt", 1).expect("fuck you");
-
-//   let res = scraper
-//     .get_page("https://rentumo.ch/mietobjekte?page=0")
-//     .await
-//     .expect("adwoij");
-
-//   let mut file = File::create("output.txt").expect("Failed to create file");
-//   file.write_all(res.as_bytes())
-//     .expect("Failed to write to file");
-
-//   println!("{res}");
-// }
-
-fn main() {
-  let test = read_to_string("./output.html").unwrap();
-
-  let html = Html::parse_document(&test);
-
-  // get all listing links
   let selector = Selector::parse(r#"#listings > div > div"#).unwrap();
+  let details = Selector::parse(r#"div:nth-child(2) > a > ul > li"#).unwrap();
+  let price = Selector::parse("div:nth-child(2) > div > strong").unwrap();
+  let link = Selector::parse("div:nth-child(2) > div > a").unwrap();
 
-  let price_selector = Selector::parse(r#"div:nth-child(2) > a > ul > li"#).unwrap();
+  html
+    .select(&selector)
+    .filter_map(|elem| {
+      let mut data = elem.select(&details);
 
+      let rooms = data
+        .next()?
+        .inner_html()
+        .trim()
+        .split(" ")
+        .nth(0)?
+        .parse()
+        .unwrap_or(0);
+      data.next();
+      let m_sqrd = data
+        .next()?
+        .inner_html()
+        .trim()
+        .split(" ")
+        .nth(0)?
+        .parse()
+        .unwrap_or(0);
 
-  for elem in html.select(&selector) {
-    println!("{:?}", elem.select(&price_selector).nth(0).unwrap().inner_html());
-  }
+      let price_cold = elem
+        .select(&price)
+        .next()?
+        .inner_html()
+        .trim()
+        .replace(".", "")
+        .split(" ")
+        .nth(1)?
+        .parse()
+        .unwrap_or(0);
+
+      let slug = elem
+        .select(&link)
+        .next()?
+        .value()
+        .attr("href")?
+        .replace("/inserate/", "")
+        .into();
+
+      Some(ListingData {
+        slug,
+        rooms,
+        m_sqrd,
+        price_cold,
+      })
+    })
+    .collect()
+}
+
+#[tokio::main]
+async fn main() {
+  dotenv().ok();
+
+  let scraper = ScrapeGoat::new("./proxies.txt", "./user_agents.txt", 10).unwrap();
+  let db = Arc::new(
+    Db::new(&std::env::var("DATABASE_URL").unwrap())
+      .await
+      .unwrap(),
+  );
+  let mut mgt = Mgt::new(scraper, 10);
+
+  mgt
+    .run(|page, html| {
+      let db = db.clone();
+      async move {
+        let listings = parse_listings(&html);
+        for listing in &listings {
+          db.insert_listing(listing).await.ok();
+        }
+        println!("page {}: {} listings", page, listings.len());
+      }
+    })
+    .await;
 }

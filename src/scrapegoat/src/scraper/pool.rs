@@ -12,7 +12,7 @@ impl ClientPool {
     let clients: Vec<Client>;
     if proxies.len() == 0 {
       clients = (0..max_concurrent)
-        .map(|c| Client::builder().build().unwrap())
+        .map(|_| Client::builder().build().unwrap())
         .collect();
     } else {
       // build a client per proxy

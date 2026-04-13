@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dotenv = "0.15.0"
 scrapegoat = { path = "../scrapegoat" }
 scraper = "0.25.0"
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "macros", "tls-native-tls"] }
 tokio = { version = "1.50.0", features = ["full"] }
