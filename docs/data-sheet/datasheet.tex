@@ -1,0 +1,186 @@
+\documentclass[11pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=0.85in}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage[most]{tcolorbox}
+\usepackage{hyperref}
+
+% --- Custom Colors ---
+\definecolor{primaryBlue}{RGB}{10, 80, 160}
+\definecolor{lightGray}{RGB}{245, 245, 245}
+
+% --- Section Styling ---
+\titleformat{\section}{\large\bfseries\color{primaryBlue}}{}{0em}{}[\titlerule]
+\setlist[itemize]{leftmargin=*, noitemsep, topsep=2pt}
+
+% --- Custom Box for Student Info ---
+\newtcolorbox{studentbox}{
+    colback=lightGray,
+    colframe=primaryBlue,
+    boxrule=0.5pt,
+    arc=4pt,
+    left=15pt,
+    right=15pt,
+    top=10pt,
+    bottom=10pt
+}
+
+\begin{document}
+
+% --- Header Section ---
+\begin{center}
+    {\huge \bfseries \color{primaryBlue} Dataset Datasheet} \\[0.2cm]
+    {\large \textbf{Course:} DSPRO1 FS26} \\[0.1cm]
+\end{center}
+
+\vspace{0.4cm}
+
+% --- Student & Project Information ---
+\begin{studentbox}
+    \begin{tabularx}{\textwidth}{l X}
+        \textbf{Project Name:} & Predicting Apartment Rental Prices in Switzerland Using Machine Learning \\
+        \textbf{Student Names:} & Elias Martinelli, Timo Schlumpf \\
+        \textbf{Date:} & \today \\
+        \textbf{GitHub Repository:} & \url{github.com/wadafacc/dspro1} \\
+    \end{tabularx}
+\end{studentbox}
+
+\vspace{0.5cm}
+
+% --- Section 1: Overview ---
+\section{Dataset Overview}
+\begin{itemize}
+    \item \textbf{Official Name:} Rentumo Rental Listings Switzerland
+    \item \textbf{Owner / Contact:} Rentumo (rentumo.ch) --- no formal data sharing agreement established; contact was attempted via email prior to scraping, but no response was received.
+    \item \textbf{Short Description:} A one-time scraped snapshot of active apartment rental listings in Switzerland sourced from rentumo.ch. While 25{,}002 listings were identified on the platform, only 9{,}994 could be successfully extracted; the remainder consisted of empty or non-functional placeholder entries. The dataset contains structured, tabular information including structural apartment features and location data, representing the state of the Swiss rental market at the time of extraction. No further data collection is performed after the initial extraction.
+    \item \textbf{Version \& Date:} v1.0, Extraction Date: 13 April 2026
+    \item \textbf{Reference:} \url{https://www.rentumo.ch}
+\end{itemize}
+
+% --- Section 2: Motivation ---
+\section{Motivation and Intended Use}
+\begin{itemize}
+    \item \textbf{Primary Purpose:} To capture a current snapshot of the Swiss rental market, enabling analysis of price-to-feature relationships across active apartment listings.
+    \item \textbf{Intended Use:} Supervised regression to predict the monthly cold rent (Kaltmiete) in CHF based on structural apartment features and location-derived variables, as defined by the DSPRO1 project scope at HSLU.
+    \item \textbf{Out-of-Scope Use:} Individual tenant screening or creditworthiness assessment; legal determination of fair rent under Swiss tenancy law (OR Art.\ 269 ff.); real-time commercial pricing services; any form of profiling or discrimination based on protected characteristics.
+\end{itemize}
+
+% --- Section 3: Composition ---
+\section{Composition and Coverage}
+\begin{itemize}
+    \item \textbf{Data Types:} Structured, tabular data stored in a cloud-hosted relational database (PostgreSQL on Neon Console).
+    \item \textbf{Population:} Active rental apartment listings in Switzerland as published on rentumo.ch at the extraction date. Only residential rental apartments are included; commercial properties and shared flat (WG) rooms are excluded.
+    \item \textbf{Dataset Size:} 9{,}994 listings after scraping (single extraction on 13 April 2026; the dataset is static and will not be extended). Of the 25{,}002 listings identified on the platform, 15{,}008 could not be extracted due to empty or non-functional listing pages. Core features include living area (\texttt{area\_sqm}), cold rent (\texttt{price\_cold}), ancillary costs (\texttt{auxiliary\_costs}), number of rooms (\texttt{rooms}), address, and availability date (\texttt{available\_from}). The dataset is further enriched with the construction year from the Swiss Federal Register of Buildings and Dwellings (GWR) via EGID lookup, and with geo-layer attributes from swisstopo services including public transport accessibility, solar irradiation, elevation, population density, motorway proximity, and LV95 coordinates.
+    \item \textbf{Known Gaps / Imbalances:} Listings where \texttt{address}, \texttt{price\_cold}, \texttt{area\_sqm}, or \texttt{rooms} are NULL are deleted entirely. Listings marked ``Preis auf Anfrage'' are excluded. The dataset is a static snapshot; price changes after 13 April 2026 are not reflected. Urban centres such as Zurich, Bern, and Basel are expected to be overrepresented relative to rural cantons.
+\end{itemize}
+
+% --- Section 4: Collection ---
+\section{Sources and Collection}
+
+\textbf{Data Collection}
+
+\vspace{0.3em}
+Rental listing data was collected via automated web scraping of rentumo.ch, a Swiss real estate aggregator platform. Of the 25{,}002 listings identified on the platform, only 9{,}994 could be successfully extracted. The remaining listings were empty or consisted of non-functional placeholder entries, a characteristic of the platform's data structure rather than a scraping failure.
+
+An alternative primary source, comparis.ch, was evaluated but excluded. Comparis actively restricts automated data collection and confirmed in writing that formal approval would be required for any scraping activity. Even with approval, access would have been limited to approximately 300 records --- insufficient for robust model training and evaluation. Contact was made with Rentumo via email prior to data collection; no response was received.
+
+\vspace{0.5em}
+\textbf{Enrichment and Limitations}
+
+\vspace{0.3em}
+Following initial scraping, listing addresses were geocoded to obtain coordinates, which were subsequently used to retrieve building-level and geo-layer attributes from two external sources: the Swiss GWR building register (via EGID) and the swisstopo geo-services API (map.geo.admin.ch). Enrichment via these external services proved challenging due to frequent request timeouts and the large volume of data to be processed. The combination of service rate limits, response latency, and dataset size created a significant bottleneck during the enrichment and preprocessing pipeline.
+
+\begin{itemize}
+    \item \textbf{Provenance:} Publicly visible rental listings from rentumo.ch; building-level data from the Swiss Federal Register of Buildings and Dwellings (GWR); geo-layer data from swisstopo / map.geo.admin.ch.
+    \item \textbf{Collection Method:} Automated web scraping; EGID-based GWR lookup; coordinate-based swisstopo API queries.
+    \item \textbf{Jurisdictions:} Switzerland (all cantons represented in active listings at the extraction date).
+\end{itemize}
+
+% --- Section 5: Labels ---
+\section{Labels and Targets}
+\begin{itemize}
+    \item \textbf{Target Definition:} Monthly cold rent (Kaltmiete) in CHF, treated as a continuous target variable in a regression setting. The cold rent represents the base rent excluding ancillary costs (Nebenkosten).
+    \item \textbf{Labeling Process:} Labels are extracted automatically by the scraper directly from the structured price field on each listing page as displayed on rentumo.ch. No manual annotation is performed. Listings where the price field contains ``Preis auf Anfrage'' or is otherwise absent are excluded from the dataset.
+    \item \textbf{Quality Control:} All listings without a valid numeric cold rent value are removed in their entirety, as imputing the target variable would introduce systematic bias into model training and evaluation.
+\end{itemize}
+
+% --- Section 6: Data Quality Audit ---
+\section{Quality Assessment (Data Audit)}
+
+\textbf{Preprocessing}
+
+\vspace{0.3em}
+The initial dataset after scraping contained 9{,}994 listings. The following preprocessing steps were applied in sequence:
+
+\begin{itemize}
+    \item \textit{Mandatory field deletion:} Listings where any of the following fields is NULL are deleted entirely: \texttt{address}, \texttt{price\_cold}, \texttt{area\_sqm}, or \texttt{rooms}. No imputation is applied to these fields.
+    \item \textit{Missing ancillary costs (\texttt{auxiliary\_costs}):} NULL values are replaced with the global median of the feature across all retained listings.
+    \item \textit{Missing availability date (\texttt{available\_from}):} NULL values are replaced with the extraction date (13 April 2026), interpreted as ``available immediately''.
+    \item \textit{Missing construction year (\texttt{year\_built}):} Only the four-digit construction year is retained from the GWR record; all other date components are discarded. Missing values are replaced with the median construction year across all retained listings.
+    \item \textit{Deposit (\texttt{kaution}):} Scraped and stored in the database but excluded from model training; retained for reference only.
+    \item \textit{Description (\texttt{description}):} Scraped and stored but not used in the current model; reserved for potential future NLP-based feature extraction.
+    \item \textit{Geocoding:} Address strings are converted to coordinates via a geocoding API. Failed lookups are flagged for review.
+    \item \textit{EGID enrichment:} Construction year is joined from the GWR register using the EGID identifier resolved from the listing address. Only \texttt{year\_built} is retained from the EGID record.
+    \item \textit{Geo-layer enrichment:} Public transport accessibility score (\texttt{oev\_score}), distance to nearest public transport stop (\texttt{pt\_distance\_m}), annual solar irradiation (\texttt{solar\_irr}), elevation (\texttt{elevation\_m}), population count (\texttt{population}), distance to nearest motorway junction (\texttt{dist\_autobahn\_m}), and LV95 coordinates (\texttt{lv95\_east}, \texttt{lv95\_north}) are retrieved from swisstopo services per listing coordinate.
+    \item \textit{Categorical encoding:} Canton is stored as an ISO 3166-2:CH code (e.g.\ ZH, BE).
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{Initial Audit Findings}
+
+\begin{itemize}
+    \item \textit{Pending status:} Listings with a scraping status of \textit{Pending} were identified and removed from the dataset.
+    \item \textit{Duplicates:} No duplicate listings were found in the dataset.
+    \item \textit{Implausible living area values:} Listings with unrealistic area values were filtered using website-specific filters applied during the scraping stage. No additional manual outlier removal was required.
+    \item \textit{Population variable:} An initial data quality issue affecting the \texttt{population} variable --- caused by a failed geocoding step --- was identified and has been resolved.
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{Quality Dimensions}
+
+\begin{itemize}
+    \item \textit{Completeness:} All mandatory fields (\texttt{price\_cold}, \texttt{area\_sqm}, \texttt{address}, \texttt{rooms}) must be present; listings with any missing mandatory value are deleted entirely.
+    \item \textit{Accuracy:} Price and area fields are validated against plausible value ranges; geocoding results are reviewed for failed lookups.
+    \item \textit{Consistency:} Categorical fields such as canton are normalised to a standardised format. Construction year is stored as a four-digit integer only.
+    \item \textit{Timeliness:} Single point-in-time snapshot as of 13 April 2026; temporal price changes after the extraction date are not reflected in the dataset.
+\end{itemize}
+
+% --- Section 7: Ethics & Governance ---
+\section{Legal, Ethical, and Governance}
+\begin{itemize}
+    \item \textbf{Sensitive Data:} No personal data is collected or stored. Landlord names, telephone numbers, and contact details are explicitly excluded during scraping. Only the property address is retained, used solely for geocoding and building-level feature enrichment. The dataset does not contain health, financial, or other categories of sensitive personal data as defined under the Swiss Federal Act on Data Protection (nFADP).
+    \item \textbf{Compliance:} The project is conducted exclusively for academic and educational purposes within the DSPRO1 module at HSLU; no commercial use is intended. Rentumo was contacted by email prior to data collection; no response was received. Comparis was also contacted and provided written notice that formal authorisation is required for any scraping activity --- Comparis was therefore excluded as a data source. As no personal data is processed, obligations under the GDPR and nFADP are considered minimal in scope.
+    \item \textbf{Consent \& Licensing:} No formal data sharing agreement or licence has been obtained from rentumo.ch. Data is used exclusively for non-commercial research and education within the scope of the DSPRO1 course at HSLU FS26.
+\end{itemize}
+
+% --- Section: Structure & Schema ---
+\section{Dataset Structure and Schema}
+\begin{itemize}
+    \item \textbf{File Formats:} PostgreSQL database hosted on Neon Console (cloud-hosted, serverless PostgreSQL). Processed data is exportable as CSV for model training.
+    \item \textbf{Directory Layout:}
+    \begin{itemize}
+        \item \texttt{src/notebooks/} --- Jupyter notebooks for exploratory data analysis, feature engineering, and model training
+        \item \texttt{src/rentables-scraper/} --- web scraping logic for rentumo.ch
+        \item \texttt{src/scrapegoat/} --- scraping utilities and helper functions
+        \item \texttt{src/py-tests/} --- unit and integration tests
+        \item \texttt{docs/} --- datasheet, schema diagrams, and project documentation
+        \item The database is hosted externally on Neon Console; no local database directory is maintained in the repository.
+    \end{itemize}
+    \item \textbf{Schema Summary:} Three tables in the PostgreSQL database:
+    \begin{itemize}
+        \item \texttt{listings} --- scraped index table: \texttt{id} (PK, SERIAL), \texttt{slug} (TEXT, unique listing identifier from URL), \texttt{rooms} (INTEGER), \texttt{m\_sqrd} (INTEGER), \texttt{price\_cold} (INTEGER); references \texttt{listing\_details}.
+        \item \texttt{listing\_details} --- full listing attributes: \texttt{id} (PK, SERIAL), \texttt{listing\_id} (FK to \texttt{listings}), \texttt{address} (TEXT), \texttt{price\_cold} (INTEGER, target variable), \texttt{area\_sqm} (INTEGER), \texttt{rooms} (INTEGER), \texttt{auxiliary\_costs} (INTEGER), \texttt{kaution} (INTEGER, stored but excluded from model), \texttt{description} (TEXT, stored for future NLP use), \texttt{available\_from} (TEXT), \texttt{year\_built} (INTEGER, construction year from GWR via EGID).
+        \item \texttt{swisstopo\_details} --- geo-layer attributes from swisstopo / map.geo.admin.ch: \texttt{listing\_id} (FK), \texttt{oev\_score} (NUMERIC, public transport accessibility score), \texttt{pt\_distance\_m} (NUMERIC, distance to nearest public transport stop in metres), \texttt{solar\_irr} (NUMERIC, annual solar irradiation in kWh/m\textsuperscript{2}), \texttt{elevation\_m} (NUMERIC, elevation above sea level in metres), \texttt{population} (INTEGER, inhabitants in the 1\,ha grid cell), \texttt{dist\_autobahn\_m} (NUMERIC, distance to nearest motorway junction in metres), \texttt{lv95\_east} (NUMERIC, LV95 easting coordinate), \texttt{lv95\_north} (NUMERIC, LV95 northing coordinate).
+    \end{itemize}
+    \item \textbf{Units \& Encodings:} Prices in CHF (INTEGER); area in m\textsuperscript{2} (INTEGER); \texttt{available\_from} as TEXT (NULL replaced with extraction date 2026-04-13); \texttt{year\_built} as four-digit INTEGER (NULL replaced with median); canton derived from address as ISO 3166-2:CH code (e.g.\ \texttt{ZH}, \texttt{BE}); distances in metres (NUMERIC); solar irradiation in kWh/m\textsuperscript{2} (NUMERIC); elevation in metres (NUMERIC); population as integer count per 1\,ha grid cell; LV95 coordinates as NUMERIC.
+\end{itemize}
+
+\end{document}
