@@ -1,10 +1,11 @@
 # =========================
-# Existing entries (preserved)
+# General
 # =========================
-src/notebooks/archive/
 .env
-target/
+.env.*
 .DS_Store
+Thumbs.db
+*.Zone.Identifier
 
 # =========================
 # Python
@@ -14,11 +15,14 @@ __pycache__/
 *$py.class
 *.so
 .Python
-*.egg-info/
+
+# Packaging
 *.egg
+*.egg-info/
 .eggs/
 build/
 dist/
+site/
 pip-log.txt
 pip-delete-this-directory.txt
 
@@ -35,20 +39,23 @@ ENV/
 # Jupyter
 # =========================
 .ipynb_checkpoints/
-*.ipynb_checkpoints
 .jupyter/
 
 # =========================
-# ML artifacts
+# ML / Data Science
 # =========================
 models/*.joblib
 models/*.pkl
 models/*.pickle
 models/*.h5
 models/requirements_used.txt
-**/catboost_info/
+
+# ML experiment tracking
 mlruns/
 .mlflow/
+
+# CatBoost
+**/catboost_info/
 
 # =========================
 # IDE / Editor
@@ -58,7 +65,6 @@ mlruns/
 *.code-workspace
 *.swp
 *.swo
-Thumbs.db
 
 # =========================
 # Testing / Coverage
@@ -69,9 +75,16 @@ Thumbs.db
 htmlcov/
 .tox/
 .nox/
+.mypy_cache/
+.ruff_cache/
 
 # =========================
-# LaTeX build artefacts (docs/)
+# Logs
+# =========================
+*.log
+
+# =========================
+# LaTeX
 # =========================
 *.aux
 *.log
@@ -86,12 +99,24 @@ htmlcov/
 *.lof
 
 # =========================
-# OS-specific
+# Project-specific
 # =========================
-*.Zone.Identifier
+src/notebooks/archive/
 
 # =========================
-# Rust (scrapegoat)
+# Rust
 # =========================
-src/scrapegoat/target/
+target/
 **/target/
+
+# =========================
+# Output / Generated files
+# =========================
+output/
+outputs/
+results/
+artifacts/
+tmp/
+temp/
+cache/
+.cache/
