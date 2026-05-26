@@ -1,17 +1,26 @@
-"""Streamlit Demo-App für die Mietpreis-Vorhersage.
+"""Streamlit-Demo fuer unser DSPRO1-Mietpreis-Modell.
 
-Start:
+Starten mit:
     streamlit run src/app.py
 
-Beim ersten Start wird das Modell aus der CSV-Datei trainiert und gecached.
-Folgende Aufrufe lesen das gecachte Modell direkt — das macht die UI schnell.
+Die App ist im Grunde eine grafische Oberflaeche fuer die `RentPredictor`-
+Klasse aus dem Notebook (Kapitel 24.2). Beim ersten Start wird das Modell
+einmal trainiert und in einem Streamlit-Cache abgelegt; jeder weitere
+Klick laeuft dann ohne Re-Training.
 
-Pipeline-Erweiterung:
-- Adresse → EGID/Koordinaten (geo.admin SearchServer)
-- EGID → GWR-Gebäudedaten (gbauj, ganzwhg, garea)
-- Koordinaten → Swisstopo (Höhe, ÖV-Score, Solar, Bevölkerung)
-- Bereinigung wie in final_records.ipynb
-- Predict via bestehender RentPredictor-Klasse (unverändert)
+Den eigentlichen Ablauf habe ich 1:1 aus dem Notebook uebernommen, damit
+die Vorhersage hier identisch ist wie das, was wir im Bericht zeigen:
+
+    Adresse  -->  EGID / Koordinaten (geo.admin SearchServer)
+    EGID     -->  GWR-Gebaeudedaten (gbauj, ganzwhg, garea)
+    Koord.   -->  Swisstopo-Layer (Hoehe, OeV, Solar, Population)
+    Cleaning wie in final_records.ipynb
+    Predict via RentPredictor.predict(...)
+
+Wenn jemand das Repo neu checkt: einfach `streamlit run src/app.py`
+ausfuehren, die App holt sich `model.csv` automatisch.
+
+— Elias, Team 8
 """
 from __future__ import annotations
 
@@ -43,20 +52,28 @@ except ImportError:
     HAS_LGBM = False
 
 
-# ===========================================================================
-# Pfade
-# ===========================================================================
-APP_DIR    = Path(__file__).resolve().parent
+# --- Pfade ------------------------------------------------------------------
+# Wir lassen die App relativ zum Repo-Root suchen, damit ich sie sowohl lokal
+# als auch in einer aufgeraeumten Repo-Kopie starten kann.
+APP_DIR      = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
-DATA_PATH  = APP_DIR / "external-sources" / "output_csv" / "model.csv"
-MODEL_PATH = PROJECT_ROOT / "models" / "rent_predictor_streamlit.joblib"
+DATA_PATH    = APP_DIR / "external-sources" / "output_csv" / "model.csv"
+MODEL_PATH   = PROJECT_ROOT / "models" / "rent_predictor_streamlit.joblib"
 
 
-# ===========================================================================
-# RentPredictor (inline, identisch zur Notebook-Klasse Kapitel 24.2)
-# ===========================================================================
+# --- RentPredictor ----------------------------------------------------------
+# Das ist exakt dieselbe Klasse wie im Notebook (Kap. 24.2). Ich habe sie hier
+# noch einmal inline, damit `app.py` ohne den Notebook-Code direkt laufen
+# kann — sonst muesste ich beim Demo-Setup auch noch das Notebook
+# importieren, und das ist es mir nicht wert.
 class RentPredictor:
-    """End-to-End-Pipeline fuer die Mietpreis-Vorhersage."""
+    """End-to-End-Pipeline fuer die Mietpreis-Vorhersage.
+
+    Reihenfolge im fit:
+        clean -> engineer -> geo-cluster -> knn-features -> imputer -> model
+
+    Im predict laeuft dieselbe Pipeline, aber natuerlich ohne neues Fitten.
+    """
 
     def __init__(
         self,
@@ -184,19 +201,30 @@ class RentPredictor:
         for c in self.feature_cols:
             if c not in df_k.columns:
                 df_k[c] = np.nan
-        X = self._imputer.transform(df_k[self.feature_cols])
-        return self.model.predict(X)
+        X_arr = self._imputer.transform(df_k[self.feature_cols])
+
+        # Falls ein Modell mit Feature-Namen trainiert wurde (z.B. LightGBM),
+        # geben wir auch beim Predict ein DataFrame mit denselben Namen weiter.
+        if hasattr(self.model, "feature_names_in_"):
+            X_df = pd.DataFrame(X_arr, columns=list(self.feature_cols), index=df_k.index)
+            ordered = list(self.model.feature_names_in_)
+            for col in ordered:
+                if col not in X_df.columns:
+                    X_df[col] = np.nan
+            return self.model.predict(X_df[ordered])
+
+        return self.model.predict(X_arr)
 
 
-# ===========================================================================
-# Pipeline-Funktionen: Adresse -> EGID -> GWR -> Swisstopo -> Features
+# --- Pipeline-Funktionen ----------------------------------------------------
+# Reihenfolge: Adresse -> EGID -> GWR -> Swisstopo -> Features
 # Logik 1:1 aus den drei Notebooks:
 #   - gwr_egid_db_sync.ipynb         (search_address, fetch_gwr_feature)
 #   - swisstopo_enrich_db_sync_v2    (geocode, get_elevation, identify, parse_*)
 #   - final_records.ipynb            (Pflichtfelder + Spalten-Reihenfolge)
-# ===========================================================================
 
-# API-Endpunkte (identisch zu den Notebooks)
+# API-Endpunkte (1:1 aus den Notebooks uebernommen, damit die App genau
+# dieselben Daten holt, mit denen das Modell trainiert wurde)
 API_SEARCH_URL   = "https://api3.geo.admin.ch/rest/services/api/SearchServer"
 API_FIND_URL     = "https://api3.geo.admin.ch/rest/services/api/MapServer/find"
 API_IDENTIFY_URL = "https://api3.geo.admin.ch/rest/services/api/MapServer/identify"
@@ -1236,9 +1264,10 @@ def clean_and_finalize_records(
     return df_model, status
 
 
-# ===========================================================================
-# Daten- und Modell-Loader (mit Caching)
-# ===========================================================================
+# --- Daten- und Modell-Loader -----------------------------------------------
+# Streamlit-Caching: das Modell wird einmal trainiert (geht ein paar Sekunden)
+# und danach aus dem Cache wiederverwendet. Andernfalls wuerde es bei jedem
+# Klick erneut trainieren, und die App waere unbenutzbar langsam.
 COLUMN_RENAMES = {
     "area_sqm":    "area",
     "rooms":       "rooms",
@@ -1293,502 +1322,986 @@ def get_predictor() -> tuple[RentPredictor, str]:
     return rp, "frisch trainiert"
 
 
-# ===========================================================================
-# UI
-# ===========================================================================
-st.set_page_config(
-    page_title="Mietpreis-Schätzer Schweiz",
-    page_icon="🏠",
-    layout="wide",
-)
 
-st.title("🏠 Mietpreis-Schätzer Schweiz")
-st.caption("HSLU DSPRO1 Team 8 — Demo der `RentPredictor`-Pipeline aus `model_v3_clean.ipynb`")
+# --- UI: Streamlit-Dashboard ------------------------------------------------
+# Ab hier ist alles "nur" Frontend. Die Logik (Adresse -> Features -> Predict)
+# steckt komplett in den Pfad-/Pipeline-Funktionen weiter oben; hier wird nur
+# noch eingegeben, gerendert und angezeigt.
+APP_VERSION = "Dashboard v4.3"
 
-# Modell laden
-try:
-    predictor, model_source = get_predictor()
-except FileNotFoundError as e:
-    st.error(str(e))
-    st.stop()
+PRES_NAVY = "#1F2A44"
+PRES_BLUE = "#263B73"
+PRES_RED = "#FF454F"
+PRES_BG = "#F7F8FB"
+PRES_MUTED = "#6B7280"
 
-st.sidebar.success(f"Modell: {type(predictor.model).__name__} ({model_source})")
-st.sidebar.divider()
-
-# ---------- Wohnungs-Eigenschaften ----------
-st.sidebar.header("🏢 Wohnung")
-area       = st.sidebar.slider("Wohnfläche (m²)",      20, 250, 75)
-rooms      = st.sidebar.slider("Zimmer",                 1,   8,  3)
-year_built = st.sidebar.slider("Baujahr",             1900, 2026, 1990)
-
-st.sidebar.header("🏗️ Gebäude")
-apartments = st.sidebar.slider("Wohnungen im Gebäude",   1, 100,  8)
-land_area  = st.sidebar.slider("Grundstücksfläche (m²)", 50, 2000, 300)
-
-# ---------- Lage ----------
-st.sidebar.header("📍 Lage")
-LOCATION_PRESETS = {
-    "Zürich (HB)":     (2683000, 1247000,  408),
-    "Bern (HB)":       (2600000, 1200000,  540),
-    "Luzern (HB)":     (2666000, 1211000,  435),
-    "Genf (HB)":       (2500000, 1118000,  375),
-    "Basel (SBB)":     (2611000, 1267000,  270),
-    "Lugano (Centro)": (2717500, 1095500,  273),
-    "Zermatt":         (2624500, 1097000, 1620),
-    "Custom":          None,
+PROJECT_METRICS = {
+    "rmse": 393.0,
+    "r2": 0.751,
+    "baseline_rmse": 847.0,
+    "band_mae": {
+        "Cheap": 216.0,
+        "Medium-low": 176.0,
+        "Medium-high": 221.0,
+        "Expensive": 445.0,
+    },
 }
-preset = st.sidebar.selectbox("Stadt-Preset", list(LOCATION_PRESETS.keys()))
-if LOCATION_PRESETS[preset] is not None:
-    east_d, north_d, elev_d = LOCATION_PRESETS[preset]
-else:
-    east_d, north_d, elev_d = 2683000, 1247000, 408
 
-east      = st.sidebar.number_input("LV95 East",       value=east_d,  step=1000)
-north     = st.sidebar.number_input("LV95 North",      value=north_d, step=1000)
-elevation = st.sidebar.number_input("Höhe (m ü. M.)",  value=elev_d,  step=10)
-
-# ---------- Lagedaten ----------
-st.sidebar.header("🌍 Lagedaten")
-population = st.sidebar.slider("Bevölkerung Hektar",         1,    600, 100)
-oev        = st.sidebar.slider("ÖV-Erschliessung (Score)",   0, 100000, 4000)
-solar      = st.sidebar.slider("Solar-Klasse (1=schlecht, 5=top)", 1, 5, 3)
-
-# ---------- Predict ----------
-input_df = pd.DataFrame([{
-    "east":       east,
-    "north":      north,
-    "elevation":  elevation,
-    "area":       area,
-    "rooms":      rooms,
-    "year_built": year_built,
-    "apartments": apartments,
-    "land_area":  land_area,
-    "population": population,
-    "oev":        oev,
-    "solar":      solar,
-}])
-
-predicted = float(predictor.predict(input_df)[0])
-
-# ===========================================================================
-# 🔍 Adress-Lookup (2-stufig: Adresse → Wohnungs-Dropdown → Predict)
-# Bestehender manueller Sidebar-Flow unten bleibt unverändert.
-# ===========================================================================
-st.subheader("🔍 Adress-Lookup mit GeoAdmin & GWR")
-st.markdown(
-    "Gib eine Adresse ein → wir suchen die EGID, holen alle Wohnungen aus dem "
-    "GWR und du wählst eine aus dem Dropdown. Wohnfläche, Zimmerzahl und "
-    "Stockwerk werden automatisch übernommen. Du kannst sie noch anpassen, "
-    "bevor der bestehende `RentPredictor.predict()` aufgerufen wird."
-)
-
-# --- Session State Initialisierung ---
-st.session_state.setdefault("lookup_egid_info", None)
-st.session_state.setdefault("lookup_dwellings", [])
-st.session_state.setdefault("lookup_address",   "Kronenbergstrasse 5, Thalwil")
-st.session_state.setdefault("lookup_area",      75)
-st.session_state.setdefault("lookup_rooms",     3.0)
-st.session_state.setdefault("lookup_floor",     "—")
-st.session_state.setdefault("dwelling_selector_idx", 0)
+MODEL_COMPARISON = pd.DataFrame([
+    {"Model": "Dummy mean", "RMSE Eval": 847, "R²": 0.000},
+    {"Model": "Ridge", "RMSE Eval": 560, "R²": None},
+    {"Model": "RandomForest", "RMSE Eval": 425, "R²": None},
+    {"Model": "GradientBoosting", "RMSE Eval": 425, "R²": None},
+    {"Model": "XGBoost", "RMSE Eval": 421, "R²": None},
+    {"Model": "LightGBM", "RMSE Eval": 399, "R²": None},
+    {"Model": "LightGBM + KNN", "RMSE Eval": 393, "R²": 0.751},
+])
 
 
-def _apply_dwelling_to_inputs(sel: dict) -> None:
-    """Übernimmt Werte einer Wohnung in die Streamlit-Inputs (Session State)."""
+def inject_css() -> None:
+    st.markdown(f"""
+    <style>
+    .stApp {{
+        background: linear-gradient(180deg, #ffffff 0%, {PRES_BG} 100%);
+    }}
+    .block-container {{
+        max-width: 1360px;
+        padding-top: 2.0rem;
+        padding-bottom: 3rem;
+    }}
+    div[data-testid="stSidebar"] {{
+        background: #EEF2F7;
+        border-right: 1px solid #DEE4EE;
+    }}
+    h1, h2, h3 {{
+        color: {PRES_NAVY};
+        letter-spacing: .01em;
+    }}
+    .hero {{
+        background: linear-gradient(135deg, {PRES_NAVY} 0%, {PRES_BLUE} 70%, #375AA4 100%);
+        color: white;
+        padding: 28px 32px;
+        border-radius: 26px;
+        box-shadow: 0 18px 50px rgba(31,42,68,.18);
+        margin-bottom: 20px;
+    }}
+    .hero h1 {{
+        color: white;
+        margin: 0;
+        font-size: 2.35rem;
+    }}
+    .hero p {{
+        margin: 8px 0 0 0;
+        color: rgba(255,255,255,.82);
+        font-size: 1.05rem;
+    }}
+    .version-pill {{
+        display: inline-block;
+        margin-top: 14px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.16);
+        border: 1px solid rgba(255,255,255,.30);
+        color: white;
+        font-size: .82rem;
+    }}
+    .kpi-grid {{
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+        margin: 14px 0 18px 0;
+    }}
+    .kpi-card {{
+        background: white;
+        border: 1px solid #E6E9F0;
+        border-radius: 20px;
+        padding: 18px 20px;
+        box-shadow: 0 12px 30px rgba(31,42,68,.07);
+    }}
+    .kpi-label {{
+        color: {PRES_MUTED};
+        font-size: .84rem;
+        margin-bottom: 6px;
+    }}
+    .kpi-value {{
+        color: {PRES_NAVY};
+        font-size: 1.75rem;
+        font-weight: 760;
+        line-height: 1.12;
+    }}
+    .kpi-note {{
+        color: {PRES_MUTED};
+        font-size: .78rem;
+        margin-top: 6px;
+    }}
+    .section-card {{
+        background: white;
+        border: 1px solid #E5E7EB;
+        border-radius: 22px;
+        padding: 22px 24px;
+        box-shadow: 0 12px 32px rgba(31,42,68,.06);
+        margin: 14px 0;
+    }}
+    .success-box {{
+        background: #EAF8F0;
+        border: 1px solid #C9EFD8;
+        color: #116636;
+        border-radius: 16px;
+        padding: 14px 16px;
+        margin: 12px 0;
+        font-weight: 650;
+    }}
+    .warning-box {{
+        background: #FFF7E6;
+        border: 1px solid #FFE0A3;
+        color: #7A4E00;
+        border-radius: 16px;
+        padding: 14px 16px;
+        margin: 12px 0;
+    }}
+    div.stButton > button:first-child {{
+        background: {PRES_RED};
+        color: white;
+        border: 0;
+        border-radius: 14px;
+        padding: .65rem 1.2rem;
+        font-weight: 750;
+    }}
+    div.stButton > button:first-child:hover {{
+        background: #E73741;
+        color: white;
+        border: 0;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def fmt_chf(v: Any, decimals: int = 0) -> str:
+    try:
+        return f"{float(v):,.{decimals}f}".replace(",", "'") + " CHF"
+    except Exception:
+        return "—"
+
+
+def clean_label(label: str) -> str:
+    return re.sub(r"<[^>]+>", "", label or "").replace("  ", " ").strip()
+
+
+def kpi_cards(items: list[tuple[str, str, str]]) -> None:
+    html = ['<div class="kpi-grid">']
+    for label, value, note in items:
+        html.append(
+            f'<div class="kpi-card"><div class="kpi-label">{label}</div>'
+            f'<div class="kpi-value">{value}</div><div class="kpi-note">{note}</div></div>'
+        )
+    html.append("</div>")
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def geoadmin_address_suggestions(query: str, limit: int = 10) -> list[Dict[str, Any]]:
+    q = normalize_address(query)
+    if len(q) < 3:
+        return []
+    data = _request_json(API_SEARCH_URL, {
+        "searchText": q,
+        "type": "locations",
+        "origins": "address",
+        "sr": 2056,
+        "limit": int(limit),
+    }, timeout=12)
+
+    out: list[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in (data or {}).get("results") or []:
+        attrs = item.get("attrs", {}) or {}
+        label = clean_label(attrs.get("label") or attrs.get("detail") or q)
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        feature_id = attrs.get("featureId") or attrs.get("feature_id")
+        egid = None
+        if feature_id:
+            try:
+                egid = int(str(feature_id).split("_")[0])
+            except Exception:
+                egid = None
+        out.append({
+            "label": label,
+            "egid": egid,
+            "lv95_east": _safe_num(attrs.get("y")),
+            "lv95_north": _safe_num(attrs.get("x")),
+            "feature_id": feature_id,
+        })
+    return out
+
+
+class GenericJoblibModel:
+    """Adapter für Notebook-Artefakte: {'model': ..., 'features'/'feature_cols': ...}."""
+
+    def __init__(self, artifact: Any, name: str = "joblib model"):
+        self.artifact = artifact
+        self.name = name
+        if isinstance(artifact, dict):
+            self.model = artifact.get("model") or artifact.get("estimator") or artifact.get("pipeline")
+            self.feature_cols = list(
+                artifact.get("features")
+                or artifact.get("feature_cols")
+                or artifact.get("feature_names")
+                or []
+            )
+            self.meta = artifact
+        else:
+            self.model = artifact
+            self.feature_cols = list(getattr(artifact, "feature_cols", []) or getattr(artifact, "feature_names_in_", []) or [])
+            self.meta = {}
+
+        if self.model is None and hasattr(artifact, "predict"):
+            self.model = artifact
+        if not self.feature_cols and hasattr(self.model, "feature_names_in_"):
+            self.feature_cols = list(self.model.feature_names_in_)
+
+    def _prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        if "building_age" not in out.columns and "year_built" in out.columns:
+            out["building_age"] = 2026 - pd.to_numeric(out["year_built"], errors="coerce")
+        if "area_per_room" not in out.columns and {"area", "rooms"}.issubset(out.columns):
+            rooms_num = pd.to_numeric(out["rooms"], errors="coerce")
+            area_num = pd.to_numeric(out["area"], errors="coerce")
+            out["area_per_room"] = np.where(rooms_num > 0, area_num / rooms_num, np.nan)
+        if "land_area_per_apartment" not in out.columns and {"land_area", "apartments"}.issubset(out.columns):
+            a_num = pd.to_numeric(out["apartments"], errors="coerce")
+            l_num = pd.to_numeric(out["land_area"], errors="coerce")
+            out["land_area_per_apartment"] = np.where(a_num > 0, l_num / a_num, np.nan)
+
+        # lgbm_wide_4feat speichert KNN-Hilfsstrukturen.
+        if isinstance(self.artifact, dict):
+            scaler = self.artifact.get("knn_scaler")
+            nbrs = self.artifact.get("knn_index")
+            prices = self.artifact.get("knn_prices")
+            if scaler is not None and nbrs is not None and prices is not None and {"east", "north"}.issubset(out.columns):
+                try:
+                    coords = scaler.transform(out[["east", "north"]])
+                    _, idx = nbrs.kneighbors(coords, n_neighbors=min(10, len(prices)))
+                    price_arr = np.asarray(prices)
+                    out["knn_price_mean"] = price_arr[idx].mean(axis=1)
+                    out["knn_price_median"] = np.median(price_arr[idx], axis=1)
+                except Exception:
+                    pass
+
+        return out
+
+    def predict(self, df: pd.DataFrame):
+        if self.model is None or not hasattr(self.model, "predict"):
+            raise RuntimeError(f"Artefakt '{self.name}' enthält kein predict-fähiges Modell.")
+        X_full = self._prepare_features(df)
+        features = list(self.feature_cols)
+        if not features and hasattr(self.model, "feature_names_in_"):
+            features = list(self.model.feature_names_in_)
+        if not features:
+            features = [c for c in X_full.columns if c != "price"]
+
+        for col in features:
+            if col not in X_full.columns:
+                X_full[col] = np.nan
+        X = X_full[features]
+
+        if hasattr(self.model, "feature_names_in_"):
+            ordered = list(self.model.feature_names_in_)
+            for col in ordered:
+                if col not in X.columns:
+                    X[col] = np.nan
+            X = X[ordered]
+
+        return self.model.predict(X)
+
+
+def model_search_dirs() -> list[Path]:
+    return list(dict.fromkeys([
+        PROJECT_ROOT / "models",
+        APP_DIR / "models",
+        APP_DIR / "notebooks" / "models",
+        PROJECT_ROOT / "src" / "notebooks" / "models",
+        Path("/home/sa_linux/code/Elias-Martinelli/dspro1/src/notebooks/models"),
+    ]))
+
+
+def discover_model_options() -> list[Dict[str, Any]]:
+    """Findet verfügbare Notebook-Modelle.
+
+    Wichtig:
+    - `best_model_v3.joblib` ist der neue Default.
+    - `rent_predictor_streamlit.joblib` wird bewusst ausgeblendet, weil dieses
+      lokale Cache-Artefakt veraltet/falsch sein kann.
+    - Der alte Auto-Train-Fallback erscheint nur, falls gar kein Notebook-Modell
+      gefunden wird.
+    """
+    options: list[Dict[str, Any]] = []
+    seen: set[str] = set()
+
+    hidden_filenames = {
+        "rent_predictor_streamlit.joblib",
+    }
+
+    priority = {
+        "best_model_v3.joblib": 0,
+        "lgbm_wide_4feat.joblib": 1,
+        "rent_predictor_v3.joblib": 2,
+        "lgbm_minimal_4feat.joblib": 3,
+    }
+
+    for d in model_search_dirs():
+        try:
+            files = sorted(d.glob("*.joblib")) if d.exists() else []
+        except Exception:
+            files = []
+
+        for path in files:
+            if path.name in hidden_filenames:
+                continue
+
+            rp = str(path.resolve())
+            if rp in seen:
+                continue
+            seen.add(rp)
+
+            name = path.name
+            label = name
+            if name == "best_model_v3.joblib":
+                label = "best_model_v3.joblib · Default / Best Eval"
+            elif name == "lgbm_wide_4feat.joblib":
+                label = "lgbm_wide_4feat.joblib · Production Pick"
+            elif name == "lgbm_minimal_4feat.joblib":
+                label = "lgbm_minimal_4feat.joblib · Minimal"
+            elif name == "rent_predictor_v3.joblib":
+                label = "rent_predictor_v3.joblib · Notebook Full Predictor"
+
+            options.append({
+                "key": rp,
+                "label": label,
+                "path": path,
+                "is_default": name == "best_model_v3.joblib",
+                "sort_rank": priority.get(name, 50),
+            })
+
+    # Bestes Modell zuerst; danach definierte Reihenfolge und Name.
+    options.sort(key=lambda x: (x.get("sort_rank", 50), Path(str(x.get("path", ""))).name))
+
+    # Nur wenn keine Notebook-Modelle gefunden wurden: alter Fallback.
+    if not options:
+        options.append({
+            "key": "__default__",
+            "label": "Fallback · aktueller RentPredictor aus model.csv",
+            "path": None,
+            "is_default": True,
+            "sort_rank": 999,
+        })
+
+    return options
+
+
+@st.cache_resource(show_spinner=False)
+def load_joblib_artifact(path_str: str) -> Any:
+    return joblib.load(path_str)
+
+
+def load_selected_predictor(model_key: str) -> tuple[Any, Dict[str, Any]]:
+    if model_key == "__default__":
+        predictor, source = get_predictor()
+        return predictor, {
+            "label": "Default · aktueller RentPredictor",
+            "source": source,
+            "path": str(MODEL_PATH),
+            "kind": type(getattr(predictor, "model", predictor)).__name__,
+            "rmse_eval": PROJECT_METRICS["rmse"],
+            "r2_eval": PROJECT_METRICS["r2"],
+        }
+
+    artifact = load_joblib_artifact(model_key)
+    if isinstance(artifact, dict) and "predictor" in artifact:
+        pred = artifact["predictor"]
+        metrics = artifact.get("test_metrics") or {}
+        return pred, {
+            "label": Path(model_key).name,
+            "source": "joblib predictor",
+            "path": model_key,
+            "kind": type(getattr(pred, "model", pred)).__name__,
+            "rmse_eval": artifact.get("rmse_eval") or metrics.get("rmse") or PROJECT_METRICS["rmse"],
+            "r2_eval": artifact.get("r2_eval") or metrics.get("r2") or PROJECT_METRICS["r2"],
+            "feature_cols": artifact.get("feature_cols"),
+        }
+
+    adapter = GenericJoblibModel(artifact, name=Path(model_key).name)
+    meta = {
+        "label": Path(model_key).name,
+        "source": "joblib model",
+        "path": model_key,
+        "kind": type(getattr(adapter, "model", adapter)).__name__,
+        "features": getattr(adapter, "feature_cols", []),
+        "rmse_eval": PROJECT_METRICS["rmse"],
+        "r2_eval": PROJECT_METRICS["r2"],
+    }
+    if isinstance(artifact, dict):
+        meta.update({
+            "rmse_eval": artifact.get("rmse_eval") or artifact.get("rmse") or meta["rmse_eval"],
+            "r2_eval": artifact.get("r2_eval") or artifact.get("r2") or meta["r2_eval"],
+            "overfit_gap": artifact.get("overfit_gap") or artifact.get("gap"),
+            "n_train": artifact.get("n_train"),
+            "n_eval": artifact.get("n_eval"),
+        })
+    return adapter, meta
+
+
+def safe_predict(model_obj: Any, df: pd.DataFrame) -> np.ndarray:
+    return np.asarray(model_obj.predict(df.copy()), dtype=float)
+
+
+def prediction_band(prediction: float, data: Optional[pd.DataFrame] = None) -> tuple[str, float]:
+    maes = PROJECT_METRICS["band_mae"]
+    try:
+        if data is not None and "price" in data.columns and data["price"].notna().sum() > 10:
+            q25, q50, q75 = data["price"].quantile([0.25, 0.50, 0.75]).tolist()
+            if prediction <= q25:
+                return "Cheap", maes["Cheap"]
+            if prediction <= q50:
+                return "Medium-low", maes["Medium-low"]
+            if prediction <= q75:
+                return "Medium-high", maes["Medium-high"]
+            return "Expensive", maes["Expensive"]
+    except Exception:
+        pass
+    if prediction < 1500:
+        return "Cheap", maes["Cheap"]
+    if prediction < 2300:
+        return "Medium-low", maes["Medium-low"]
+    if prediction < 3500:
+        return "Medium-high", maes["Medium-high"]
+    return "Expensive", maes["Expensive"]
+
+
+def hero() -> None:
+    st.markdown(f"""
+    <div class="hero">
+        <h1>Mietpreis-Schätzer Schweiz</h1>
+        <p>Adresse → EGID/GWR → Swisstopo → Modellvergleich → transparente Kaltmiet-Schätzung</p>
+        <span class="version-pill">Version: {APP_VERSION}</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def selected_dwelling() -> Optional[dict]:
+    dwellings = st.session_state.get("lookup_dwellings") or []
+    idx = int(st.session_state.get("dwelling_selector_idx", 0) or 0)
+    if 0 <= idx < len(dwellings):
+        return dwellings[idx]
+    return None
+
+
+def apply_dwelling_to_inputs(sel: dict) -> None:
+    if not sel:
+        return
     if sel.get("area") is not None:
         try:
             st.session_state.lookup_area = max(10, min(500, int(round(float(sel["area"])))))
-        except (ValueError, TypeError):
+        except Exception:
             pass
     if sel.get("rooms") is not None:
         try:
             st.session_state.lookup_rooms = max(0.5, min(15.0, float(sel["rooms"])))
-        except (ValueError, TypeError):
+        except Exception:
             pass
-    fl = sel.get("floor_label")
-    if fl:
-        st.session_state.lookup_floor = fl
+    if sel.get("floor_label"):
+        st.session_state.lookup_floor = sel.get("floor_label")
 
 
-def _on_dwelling_change():
-    """Callback: bei Wohnungs-Auswahl Wohnfläche/Zimmer/Stockwerk auto-fill."""
-    idx = st.session_state.get("dwelling_selector_idx", 0)
-    dwellings = st.session_state.get("lookup_dwellings") or []
-    if 0 <= idx < len(dwellings):
-        _apply_dwelling_to_inputs(dwellings[idx])
+def on_dwelling_change() -> None:
+    sel = selected_dwelling()
+    if sel:
+        apply_dwelling_to_inputs(sel)
 
-# --- Stage 1: Adresse + "Gebäude suchen" ---
-addr_col, search_col = st.columns([7, 2])
-address_input = addr_col.text_input(
-    "Adresse (Strasse Nr, PLZ Ort)",
-    value=st.session_state.lookup_address,
-    placeholder="z. B. Limmatquai 28, 8001 Zürich",
-    key="lookup_address_input",
-)
-search_clicked = search_col.button(
-    "📍 Gebäude suchen",
-    type="primary",
-    use_container_width=True,
-)
 
-if search_clicked:
-    # Streamlit-Cache der Wohnungs-Funktion invalidieren, damit neue Code-Pfade
-    # (htmlPopup, Feature-Endpoint) bei Re-Run aktiv werden.
+def fmt_dwelling(idx: int) -> str:
+    d = (st.session_state.get("lookup_dwellings") or [])[idx]
+    ew = d.get("ewid") or "?"
+    label = d.get("label") or ""
+    floor = d.get("floor_label") or "—"
+    r = d.get("rooms")
+    a = d.get("area")
+    r_str = f"{r:.1f}".rstrip("0").rstrip(".") if r else "?"
+    a_str = f"{a:.0f}" if a else "?"
+    label_part = f" · {label}" if label else ""
+    return f"EWID {ew}{label_part} · {floor} · {r_str} Zi · {a_str} m²"
+
+
+def address_picker() -> Optional[str]:
+    st.markdown("### 🔎 Offizielle Adresse suchen")
+    st.caption("Tippe Strasse/Hausnummer. Ort oder PLZ ist optional; der Vorschlag kommt von GeoAdmin.")
+    selected_label: Optional[str] = None
+
+    try:
+        from streamlit_searchbox import st_searchbox  # type: ignore
+
+        def search(term: str) -> list[str]:
+            return [x["label"] for x in geoadmin_address_suggestions(term, limit=10)]
+
+        selected_label = st_searchbox(
+            search,
+            key="live_address_search",
+            placeholder="z. B. Kirchhaldenstrasse 36b oder Kronenbergstrasse 5",
+            label="Adresse suchen",
+            clear_on_submit=False,
+        )
+        if selected_label:
+            st.session_state.selected_address_label = selected_label
+
+    except Exception:
+        query = st.text_input(
+            "Adresse suchen",
+            value=st.session_state.get("address_query", ""),
+            placeholder="z. B. Kirchhaldenstrasse 36b oder Kronenbergstrasse 5",
+            key="address_query",
+        )
+        suggestions = geoadmin_address_suggestions(query, limit=10)
+        if suggestions:
+            labels = [s["label"] for s in suggestions]
+            selected_label = st.selectbox("Offizielle Adresse auswählen", labels, key="address_suggestion_select")
+            st.session_state.selected_address_label = selected_label
+        elif len(normalize_address(query)) >= 3:
+            st.info("Noch kein offizieller Vorschlag gefunden. Ergänze Ort oder Hausnummer, falls nötig.")
+
+    return selected_label or st.session_state.get("selected_address_label")
+
+
+def run_address_lookup(selected_label: str) -> None:
     try:
         load_gwr_dwellings_with_debug.clear()
     except Exception:
         pass
 
-    # Reset: Inputs auf Default, Selector zurück auf 0, alte Debug-Info löschen
-    st.session_state.lookup_area  = 75
+    st.session_state.lookup_area = 75
     st.session_state.lookup_rooms = 3.0
     st.session_state.lookup_floor = "—"
     st.session_state.dwelling_selector_idx = 0
     st.session_state.lookup_dwellings_debug = None
     st.session_state.lookup_dwellings_synthesized = False
 
-    try:
-        with st.spinner("Suche Adresse via GeoAdmin SearchServer ..."):
-            egid_info = lookup_egid(address_input)
+    with st.spinner("Adresse via GeoAdmin auflösen ..."):
+        egid_info = lookup_egid(selected_label)
 
-        dwellings: list = []
-        debug_info: Dict[str, Any] = {}
-        if egid_info.get("egid"):
-            with st.spinner(f"Lade alle Wohnungen für EGID {egid_info['egid']} ..."):
-                try:
-                    dwellings, debug_info = load_gwr_dwellings_with_debug(
-                        int(egid_info["egid"])
-                    )
-                except Exception as exc:
-                    st.warning(
-                        f"⚠️ Wohnungs-Liste nicht abrufbar — manuelle Eingabe nötig "
-                        f"({type(exc).__name__}: {exc})"
-                    )
-                    debug_info = {"error": f"{type(exc).__name__}: {exc}"}
+    dwellings: list = []
+    debug_info: Dict[str, Any] = {}
+    if egid_info.get("egid"):
+        with st.spinner(f"Wohnungen für EGID {egid_info['egid']} laden ..."):
+            try:
+                dwellings, debug_info = load_gwr_dwellings_with_debug(int(egid_info["egid"]))
+            except Exception as exc:
+                debug_info = {"error": f"{type(exc).__name__}: {exc}"}
 
-            # FALLBACK: keine echten Wohnungs-Daten → aus ganzwhg synthetisieren
-            if not dwellings:
-                try:
-                    gwr_building = load_gwr_data(
-                        egid=egid_info.get("egid"),
-                        gwr_link=egid_info.get("gwr_link"),
-                    )
-                    synth = synthesize_dwellings_from_building(gwr_building)
-                    if synth:
-                        dwellings = synth
-                        st.session_state.lookup_dwellings_synthesized = True
-                        debug_info["synthesized_from_ganzwhg"] = {
-                            "ganzwhg": gwr_building.get("ganzwhg"),
-                            "garea":   gwr_building.get("garea"),
-                            "n_synth": len(synth),
-                        }
-                except Exception as exc:
-                    debug_info["synthesize_error"] = f"{type(exc).__name__}: {exc}"
+    # Kein künstliches Synthetisieren. Wenn nichts kommt: genau ein Default-Eintrag.
+    if not dwellings:
+        dwellings = [make_manual_entry_dwelling(area_default=75.0, rooms_default=3.0)]
+        st.session_state.lookup_dwellings_synthesized = True
+        debug_info["fallback_manual_entry"] = True
 
-            # Letzter Fallback: garantiere mindestens einen Eintrag,
-            # damit die UI nicht in einen leeren-Zustand kippt.
-            if not dwellings and egid_info.get("egid"):
-                dwellings = [make_manual_entry_dwelling()]
-                st.session_state.lookup_dwellings_synthesized = True
-                debug_info["fallback_manual_entry"] = True
-
-        st.session_state.lookup_egid_info       = egid_info
-        st.session_state.lookup_dwellings       = dwellings
-        st.session_state.lookup_dwellings_debug = debug_info
-        st.session_state.lookup_address         = address_input
-        # Auto-Fill mit der ersten Wohnung, falls vorhanden
-        if dwellings:
-            _apply_dwelling_to_inputs(dwellings[0])
-    except ValueError as e:
-        st.session_state.lookup_egid_info = None
-        st.session_state.lookup_dwellings = []
-        st.error(f"❌ {e}")
-    except requests.exceptions.RequestException as e:
-        st.error(f"⏱️ API-Timeout / Verbindungsfehler: {e}")
-    except Exception as e:
-        st.error(f"Unerwarteter Fehler: {type(e).__name__}: {e}")
+    st.session_state.lookup_egid_info = egid_info
+    st.session_state.lookup_dwellings = dwellings
+    st.session_state.lookup_dwellings_debug = debug_info
+    st.session_state.lookup_address = selected_label
+    apply_dwelling_to_inputs(dwellings[0])
 
 
-# --- Stage 2: Wohnung auswählen + Predict ---
-egid_info_state = st.session_state.lookup_egid_info
-dwellings_state = st.session_state.lookup_dwellings
+def render_prediction_page(model_obj: Any, model_meta: Dict[str, Any]) -> None:
+    st.markdown("## Schätzung")
+    st.markdown("Adresse auswählen, Wohnung wählen, Werte prüfen und Kaltmiete schätzen.")
 
-if egid_info_state is not None:
-    n_dw = len(dwellings_state)
-    is_synth = st.session_state.get("lookup_dwellings_synthesized", False)
-    msg = (
-        f"✅ Gefunden: **{egid_info_state['address']}**  ·  "
-        f"EGID `{egid_info_state.get('egid', '—')}`  ·  "
-    )
-    is_manual_only = (
-        is_synth and n_dw == 1
-        and dwellings_state and dwellings_state[0].get("label", "").startswith("Manuelle Eingabe")
-    )
-    if n_dw > 0 and not is_synth:
-        msg += f"**{n_dw} Wohnung(en)** im Gebäude verfügbar"
-    elif is_manual_only:
-        msg += "**1 Standard-Eintrag** (Manuelle Werte unten anpassen)"
-    elif n_dw > 0 and is_synth:
-        msg += f"**{n_dw} Wohnung(en) (aus GWR-Total geschätzt)**"
-    elif egid_info_state.get("egid"):
-        msg += "Wohnungs-Liste leer, Werte manuell eingeben"
-    else:
-        msg += "Keine EGID gefunden, Werte manuell eingeben"
-    st.success(msg)
-
-    if is_synth and n_dw > 0:
-        is_manual_only = (
-            n_dw == 1
-            and dwellings_state[0].get("label", "").startswith("Manuelle Eingabe")
-        )
-        if is_manual_only:
-            st.info(
-                "ℹ️ Die GWR-API liefert für diese EGID weder Wohnungs-Detaildaten "
-                "noch eine Wohnungs-Gesamtzahl. Du bekommst einen Standard-Eintrag "
-                "mit Default-Werten (75 m² / 3 Zimmer). Trage die korrekten Werte "
-                "der Wohnung unten manuell ein. Die Vorhersage funktioniert "
-                "trotzdem, weil sie auf der Adresse und den Geo-Daten basiert."
+    selected_label = address_picker()
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        if selected_label:
+            st.markdown(
+                f"<div class='success-box'>Ausgewählt: <b>{selected_label}</b><br>"
+                "Gebäude- und Wohnungsdaten werden automatisch geladen.</div>",
+                unsafe_allow_html=True,
             )
         else:
-            st.info(
-                f"ℹ️ Die GWR-Wohnungs-API liefert für diese EGID keine Detaildaten. "
-                f"Wir zeigen **{n_dw} Standard-Einträge** mit Durchschnittsfläche aus "
-                f"`garea / ganzwhg`. Du kannst Wohnfläche, Zimmer und Stockwerk pro "
-                f"Wohnung manuell anpassen."
-            )
+            st.markdown("<div class='warning-box'>Wähle zuerst eine offizielle GeoAdmin-Adresse aus dem Dropdown.</div>", unsafe_allow_html=True)
+    with c2:
+        reload_clicked = st.button("🔄 Daten neu laden", type="primary", disabled=not bool(selected_label), width="stretch")
 
-    # ---------- Wohnungs-Dropdown (nur wenn welche da sind) ----------
-    if n_dw > 0:
-        def _fmt_dwelling(idx: int) -> str:
-            d = dwellings_state[idx]
-            ew    = d.get("ewid") or "?"
-            label = d.get("label") or ""
-            floor = d.get("floor_label") or "?"
-            r     = d.get("rooms")
-            a     = d.get("area")
-            r_str = f"{r:.1f}".rstrip("0").rstrip(".") if r else "?"
-            a_str = f"{a:.0f}" if a else "?"
-            label_part = f" · {label}" if label else ""
-            return f"EWID {ew}{label_part}  ·  {floor}  ·  {r_str} Zi  ·  {a_str} m²"
+    # Dynamischer Lookup: Sobald eine offizielle Adresse ausgewählt ist,
+    # werden EGID/GWR/Wohnungen automatisch geladen. Der Button ist nur noch
+    # zum manuellen Neuladen da.
+    if selected_label and (
+        reload_clicked
+        or st.session_state.get("auto_lookup_address") != selected_label
+        or st.session_state.get("lookup_egid_info") is None
+    ):
+        try:
+            run_address_lookup(selected_label)
+            st.session_state.auto_lookup_address = selected_label
+        except Exception as e:
+            st.error(f"Adress-/Gebäude-Lookup fehlgeschlagen: {type(e).__name__}: {e}")
 
-        # idx in Range halten (falls Dwellings sich geändert haben)
-        if not (0 <= st.session_state.dwelling_selector_idx < n_dw):
+    egid_info_state = st.session_state.get("lookup_egid_info")
+    dwellings_state = st.session_state.get("lookup_dwellings") or []
+    if egid_info_state is None:
+        return
+
+    if st.session_state.get("lookup_dwellings_synthesized", False):
+        st.info("Für diese EGID wurden keine Wohnungsdetails gefunden. Die App nutzt Default 75 m² / 3 Zimmer, überschreibbar.")
+    else:
+        st.success(f"Gefunden: {egid_info_state.get('address')} · EGID {egid_info_state.get('egid')} · {len(dwellings_state)} Wohnung(en)")
+
+    if dwellings_state:
+        if not (0 <= st.session_state.get("dwelling_selector_idx", 0) < len(dwellings_state)):
             st.session_state.dwelling_selector_idx = 0
-
         st.selectbox(
             "🏠 Wohnung auswählen",
-            range(n_dw),
-            format_func=_fmt_dwelling,
+            range(len(dwellings_state)),
+            format_func=fmt_dwelling,
             key="dwelling_selector_idx",
-            on_change=_on_dwelling_change,
+            on_change=on_dwelling_change,
         )
 
-    # ---------- Auto-gefüllte Inputs (mit Override) ----------
-    # Standard-Floor-Optionen + alle vorkommenden Floors aus den Dwellings
-    base_floor_options = ["—", "EG",
-                           "1. OG", "2. OG", "3. OG", "4. OG",
-                           "5. OG", "6. OG", "7. OG", "8. OG",
-                           "1. UG", "2. UG", "UG", "1. DG", "2. DG"]
-    floors_from_dwellings = [d.get("floor_label") for d in dwellings_state
-                              if d.get("floor_label")]
-    floor_options = list(dict.fromkeys(base_floor_options + floors_from_dwellings))
-    # Aktuellen Wert sicher in den Optionen halten
+    floor_options = list(dict.fromkeys(
+        ["—", "EG", "1. Stock", "2. Stock", "3. Stock", "4. Stock", "5. Stock",
+         "1. OG", "2. OG", "3. OG", "4. OG", "5. OG", "UG", "1. UG", "2. UG", "1. DG", "2. DG"]
+        + [d.get("floor_label") for d in dwellings_state if d.get("floor_label")]
+    ))
     if st.session_state.lookup_floor not in floor_options:
         floor_options.append(st.session_state.lookup_floor)
 
-    in_col1, in_col2, in_col3 = st.columns(3)
-    in_col1.number_input(
-        "Wohnfläche (m²)",
-        min_value=10, max_value=500, step=1,
-        help="Aus GWR übernommen — anpassbar.",
-        key="lookup_area",  # session_state-bound, Wert kommt aus session_state
-    )
-    in_col2.number_input(
-        "Zimmer",
-        min_value=0.5, max_value=15.0, step=0.5,
-        help="Aus GWR übernommen — anpassbar.",
-        key="lookup_rooms",
-    )
-    in_col3.selectbox(
-        "Stockwerk",
-        floor_options,
-        key="lookup_floor",
-        help="Aktuell kein Modellfeature, nur informativ.",
-    )
+    c1, c2, c3 = st.columns(3)
+    c1.number_input("Wohnfläche (m²)", min_value=10, max_value=500, step=1, key="lookup_area")
+    c2.number_input("Zimmer", min_value=0.5, max_value=15.0, step=0.5, key="lookup_rooms")
+    c3.selectbox("Stockwerk", floor_options, key="lookup_floor")
 
-    # Lokale Variablen aus dem Session State (für Predict-Logik unten)
-    area_lookup  = st.session_state.lookup_area
-    rooms_lookup = st.session_state.lookup_rooms
-    floor_input  = st.session_state.lookup_floor
+    # Automatische Live-Schätzung: Jede Änderung an Wohnung, Fläche, Zimmer,
+    # Stockwerk oder Modell triggert einen Streamlit-Rerun und damit eine neue
+    # Schätzung. Kein separater "Analysieren"-Klick nötig.
+    st.markdown("### ⚡ Live-Schätzung")
+    try:
+        selected_dw = selected_dwelling() or {}
 
-    # ---------- Predict-Button ----------
-    if st.button("🚀 Analysieren & Preis schätzen", type="primary",
-                 key="lookup_predict_btn"):
-        try:
-            with st.spinner("Lade GWR-Gebäudedaten (Baujahr, Anzahl Whg., Grundstück) ..."):
-                try:
-                    gwr_info = load_gwr_data(
-                        egid=egid_info_state.get("egid"),
-                        gwr_link=egid_info_state.get("gwr_link"),
-                    )
-                except ValueError as gwr_err:
-                    gwr_info = {"egid": egid_info_state.get("egid"),
-                                "gbauj": None, "ganzwhg": None, "garea": None}
-                    st.warning(f"⚠️ GWR-Daten unvollständig — {gwr_err}")
-
-            with st.spinner("Lade Swisstopo (Höhe / ÖV / Solar / Bevölkerung) ..."):
-                swisstopo_info = load_swisstopo_data(
-                    east=egid_info_state["lv95_east"],
-                    north=egid_info_state["lv95_north"],
+        with st.spinner("Schätzung aktualisieren ..."):
+            try:
+                gwr_info = load_gwr_data(
+                    egid=egid_info_state.get("egid"),
+                    gwr_link=egid_info_state.get("gwr_link"),
                 )
+            except ValueError:
+                gwr_info = {"egid": egid_info_state.get("egid"), "gbauj": None, "ganzwhg": None, "garea": None}
+
+            # Gebäude-Baujahr bleibt primär; nur wenn leer, Wohnungs-Baujahr verwenden.
+            if not gwr_info.get("gbauj") and selected_dw.get("year_built_dwelling"):
+                gwr_info["gbauj"] = selected_dw.get("year_built_dwelling")
+
+            swisstopo_info = load_swisstopo_data(
+                east=egid_info_state["lv95_east"],
+                north=egid_info_state["lv95_north"],
+            )
 
             raw_df = assemble_features(
-                address        = egid_info_state["address"],
-                area_sqm       = area_lookup,
-                rooms          = rooms_lookup,
-                floor          = None if floor_input == "—" else floor_input,
-                egid_info      = egid_info_state,
-                gwr_info       = gwr_info or {},
-                swisstopo_info = swisstopo_info or {},
+                address=egid_info_state["address"],
+                area_sqm=st.session_state.lookup_area,
+                rooms=st.session_state.lookup_rooms,
+                floor=None if st.session_state.lookup_floor == "—" else st.session_state.lookup_floor,
+                egid_info=egid_info_state,
+                gwr_info=gwr_info or {},
+                swisstopo_info=swisstopo_info or {},
             )
-
             model_df, lookup_status = clean_and_finalize_records(raw_df)
+            pred_lookup = float(safe_predict(model_obj, model_df)[0])
+            band, band_mae = prediction_band(pred_lookup, load_data())
+            rmse = float(model_meta.get("rmse_eval") or PROJECT_METRICS["rmse"])
 
-            # Predict — die bestehende Funktion wird nur aufgerufen.
-            try:
-                pred_lookup = float(predictor.predict(model_df)[0])
-            except Exception as e:
-                pred_lookup = None
-                st.error(f"Prediction fehlgeschlagen: {type(e).__name__}: {e}")
+        st.session_state.last_prediction = {
+            "prediction": pred_lookup,
+            "address": egid_info_state.get("address"),
+            "egid": egid_info_state.get("egid"),
+            "area": float(st.session_state.lookup_area),
+            "rooms": float(st.session_state.lookup_rooms),
+            "floor": st.session_state.lookup_floor,
+            "price_per_sqm": pred_lookup / float(st.session_state.lookup_area),
+            "model": model_meta.get("label"),
+            "rmse": rmse,
+            "band": band,
+            "band_mae": band_mae,
+            "model_df": model_df,
+        }
 
-            # ----- Result-Anzeige -----
-            if pred_lookup is not None:
-                r1, r2, r3, r4 = st.columns(4)
-                r1.metric(
-                    "💰 Geschätzte Kaltmiete",
-                    f"{pred_lookup:,.0f} CHF".replace(",", "'"),
-                )
-                r2.metric("Pro m²", f"{pred_lookup / area_lookup:.0f} CHF/m²")
-                r3.metric("EGID", str(egid_info_state.get("egid") or "—"))
-                r4.metric(
-                    "Stockwerk",
-                    "—" if floor_input == "—" else floor_input,
-                )
+        kpi_cards([
+            ("Geschätzte Kaltmiete", fmt_chf(pred_lookup), f"Modell: {model_meta.get('label', '—')}"),
+            ("Preis pro m²", f"{pred_lookup / float(st.session_state.lookup_area):.0f} CHF/m²", f"{st.session_state.lookup_area:.0f} m², {st.session_state.lookup_rooms:g} Zimmer"),
+            ("Typische Unsicherheit", f"± {fmt_chf(rmse)}", "RMSE aus Projekt-Evaluation / Artefakt"),
+            ("Preisband", f"{band}", f"typ. MAE ± {fmt_chf(band_mae)}"),
+        ])
 
-            for w in lookup_status.get("warnings", []):
-                st.warning(w)
+        st.caption("Die Schätzung aktualisiert sich automatisch, sobald du Wohnung, Fläche, Zimmer, Adresse oder Modell änderst.")
 
-            with st.expander("🧾 API-Rohdaten (lookup_egid + load_gwr_data + load_swisstopo_data)"):
-                api_rows = [
-                    {"Quelle": "lookup_egid",
-                     **{k: v for k, v in egid_info_state.items() if k != "feature_id"}},
-                    {"Quelle": "load_gwr_data",
-                     **{k: v for k, v in (gwr_info or {}).items() if k != "_attrs"}},
-                    {"Quelle": "load_swisstopo_data",
-                     **(swisstopo_info or {})},
-                ]
-                st.dataframe(
-                    pd.DataFrame(api_rows).T.rename(columns={
-                        0: "lookup_egid",
-                        1: "load_gwr_data",
-                        2: "load_swisstopo_data",
-                    }),
-                    use_container_width=True,
-                )
+        for w in lookup_status.get("warnings", []):
+            st.warning(w)
 
-            with st.expander("🔧 Bereinigte Modell-Eingabe (clean_and_finalize_records)"):
-                st.dataframe(
-                    model_df.T.rename(columns={0: "Wert"}),
-                    use_container_width=True,
-                )
+        with st.expander("Details: Modell-Eingabe und API-Daten"):
+            st.markdown("**Bereinigte Modell-Eingabe**")
+            st.dataframe(model_df.T.rename(columns={0: "Wert"}), width="stretch")
+            st.markdown("**API-Rohdaten**")
+            api_rows = [
+                {"Quelle": "lookup_egid", **{k: v for k, v in egid_info_state.items() if k != "feature_id"}},
+                {"Quelle": "load_gwr_data", **{k: v for k, v in (gwr_info or {}).items() if k not in ("_attrs", "_madd_debug")}},
+                {"Quelle": "load_swisstopo_data", **(swisstopo_info or {})},
+            ]
+            st.dataframe(pd.DataFrame(api_rows).T, width="stretch")
 
-        except requests.exceptions.RequestException as e:
-            st.error(f"⏱️ API-Timeout / Verbindungsfehler: {e}")
-        except Exception as e:
-            st.error(f"Unerwarteter Fehler: {type(e).__name__}: {e}")
+    except Exception as e:
+        st.error(f"Live-Schätzung fehlgeschlagen: {type(e).__name__}: {e}")
 
-    # Optional: alle Wohnungen des Gebäudes als Liste anzeigen
-    if n_dw > 0:
-        with st.expander(f"🏘️ Alle {n_dw} Wohnungen im Gebäude"):
+    if dwellings_state:
+        with st.expander(f"Alle {len(dwellings_state)} Wohnung(en) im Gebäude"):
             dw_df = pd.DataFrame(dwellings_state)
-            display_cols = [c for c in
-                            ["ewid", "label", "floor_label", "rooms", "area", "year_built_dwelling"]
-                            if c in dw_df.columns]
-            st.dataframe(
-                dw_df[display_cols].rename(columns={
-                    "ewid":        "EWID",
-                    "label":       "Bezeichnung",
-                    "floor_label": "Stockwerk",
-                    "rooms":       "Zimmer",
-                    "area":        "Fläche (m²)",
-                    "year_built_dwelling": "Wohnungs-Baujahr",
-                }),
-                use_container_width=True,
-            )
+            cols = [c for c in ["ewid", "label", "floor_label", "rooms", "area", "year_built_dwelling"] if c in dw_df.columns]
+            st.dataframe(dw_df[cols].rename(columns={
+                "ewid": "EWID", "label": "Bezeichnung", "floor_label": "Stockwerk",
+                "rooms": "Zimmer", "area": "Fläche (m²)", "year_built_dwelling": "Wohnungs-Baujahr",
+            }), width="stretch")
 
-    # Debug-Output: zeigen, falls 0 Wohnungen gefunden wurden — hilft beim
-    # Diagnostizieren, was die API tatsächlich liefert.
-    debug_info = st.session_state.get("lookup_dwellings_debug") or {}
-    if debug_info and n_dw == 0:
-        with st.expander("🐛 Debug: was hat die GWR-API geliefert?", expanded=False):
-            st.write(
-                "Wenn hier `top_keys` einen Wohnungs-bezogenen Schlüssel zeigt, "
-                "der noch nicht im Parser steht, gib mir Bescheid — "
-                "dann kann ich die Heuristik gezielt erweitern."
-            )
-            st.json(debug_info)
 
-st.divider()
+def sample_predictions(model_obj: Any, n: int = 700) -> tuple[pd.DataFrame, Optional[str]]:
+    try:
+        df = load_data().copy()
+        if "price" not in df.columns:
+            return pd.DataFrame(), "Spalte 'price' fehlt in model.csv."
+        df = df.dropna(subset=["price", "area", "rooms", "east", "north"]).reset_index(drop=True)
+        if len(df) > n:
+            df = df.sample(n=n, random_state=42).reset_index(drop=True)
+        X = df.drop(columns=["price"], errors="ignore")
+        y_pred = safe_predict(model_obj, X)
+        out = df[["price", "area", "rooms", "east", "north"]].copy()
+        out["predicted"] = y_pred
+        out["residual"] = out["price"] - out["predicted"]
+        return out, None
+    except Exception as exc:
+        return pd.DataFrame(), f"Performance-Sample konnte nicht berechnet werden: {type(exc).__name__}: {exc}"
 
-# ===========================================================================
-# 🎛️ Manuelle Eingabe (bestehender Flow — Sidebar)
-# ===========================================================================
-st.subheader("🎛️ Manuelle Eingabe (Sidebar-Sliders)")
-st.caption("Alle Werte links in der Sidebar einstellen — Result direkt darunter.")
 
-# ---------- Anzeige ----------
-col1, col2, col3 = st.columns(3)
-col1.metric("Geschätzte Kaltmiete", f"{predicted:,.0f} CHF".replace(",", "'"))
-col2.metric("Pro m²",               f"{predicted / area:.0f} CHF/m²")
-col3.metric("Standort",             preset.split(" (")[0])
+def plot_price_distribution(df: pd.DataFrame, last: Optional[dict]) -> None:
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(8, 4.2))
+    ax.hist(df["price"].dropna(), bins=35, alpha=0.78, color=PRES_BLUE)
+    ax.set_title("Preisverteilung im Modell-Datensatz")
+    ax.set_xlabel("Kaltmiete CHF")
+    ax.set_ylabel("Anzahl")
+    if last:
+        ax.axvline(last["prediction"], color=PRES_RED, linewidth=3, label="Letzte Schätzung")
+        ax.scatter([last["prediction"]], [0], color=PRES_RED, s=120, zorder=5)
+        ax.legend()
+    st.pyplot(fig, clear_figure=True)
 
-st.divider()
 
-# ---------- Sensitivität: was kostet ±10 m²? ----------
-st.subheader("📊 Sensitivität: Wie ändert sich der Preis?")
-ax_col1, ax_col2 = st.columns(2)
+def plot_actual_vs_predicted(df_pred: pd.DataFrame, last: Optional[dict]) -> None:
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    ax.scatter(df_pred["price"], df_pred["predicted"], s=18, alpha=0.38, color=PRES_BLUE)
+    lo = float(min(df_pred["price"].min(), df_pred["predicted"].min()))
+    hi = float(max(df_pred["price"].max(), df_pred["predicted"].max()))
+    ax.plot([lo, hi], [lo, hi], color=PRES_RED, linestyle="--", linewidth=1.7, label="perfekt")
+    if last:
+        p = float(last["prediction"])
+        ax.scatter([p], [p], color=PRES_RED, s=160, edgecolor="white", linewidth=1.5, zorder=5, label="Neue Schätzung")
+    ax.set_title("Actual vs. Predicted")
+    ax.set_xlabel("Actual CHF")
+    ax.set_ylabel("Predicted CHF")
+    ax.legend()
+    st.pyplot(fig, clear_figure=True)
 
-with ax_col1:
-    # Variiere area
-    areas = np.linspace(max(20, area - 30), area + 30, 50)
-    df_area = pd.concat([input_df.assign(area=a) for a in areas], ignore_index=True)
-    preds_area = predictor.predict(df_area)
-    chart_area = pd.DataFrame({"area (m²)": areas, "Predicted Price (CHF)": preds_area})
-    st.line_chart(chart_area.set_index("area (m²)"))
-    st.caption("Preis-Verlauf bei variierender Wohnfläche (alle anderen Features fix).")
 
-with ax_col2:
-    # Variiere rooms
-    rooms_range = list(range(max(1, rooms - 3), min(8, rooms + 3) + 1))
-    df_rooms = pd.concat([input_df.assign(rooms=r) for r in rooms_range], ignore_index=True)
-    preds_rooms = predictor.predict(df_rooms)
-    chart_rooms = pd.DataFrame({"rooms": rooms_range, "Predicted Price (CHF)": preds_rooms})
-    st.bar_chart(chart_rooms.set_index("rooms"))
-    st.caption("Preis-Verlauf bei variierender Zimmerzahl.")
+def render_performance_page(model_obj: Any, model_meta: Dict[str, Any]) -> None:
+    st.markdown("## Model Performance")
+    last = st.session_state.get("last_prediction")
+    rmse = float(model_meta.get("rmse_eval") or PROJECT_METRICS["rmse"])
+    r2 = model_meta.get("r2_eval", PROJECT_METRICS["r2"])
 
-st.divider()
+    if last:
+        kpi_cards([
+            ("Letzte Schätzung", fmt_chf(last["prediction"]), last.get("address", "")),
+            ("Erwartete Genauigkeit", f"± {fmt_chf(last.get('band_mae', rmse))}", f"Preisband-MAE: {last.get('band', '—')}"),
+            ("Globaler RMSE", f"± {fmt_chf(rmse)}", "quadratischer Durchschnittsfehler"),
+            ("R²", f"{float(r2):.3f}" if r2 is not None else "—", "Varianz-Erklärung"),
+        ])
+    else:
+        kpi_cards([
+            ("Bestes Projektmodell", "LightGBM + KNN", "aus finaler Evaluation"),
+            ("RMSE", fmt_chf(rmse), "niedriger ist besser"),
+            ("R²", f"{float(r2):.3f}" if r2 is not None else "—", "höher ist besser"),
+            ("Baseline RMSE", fmt_chf(PROJECT_METRICS["baseline_rmse"]), "Mean-Prediction"),
+        ])
 
-# ---------- Eingabe-Daten ----------
-with st.expander("🔍 Eingabe-Daten anzeigen"):
-    st.dataframe(input_df.T.rename(columns={0: "Wert"}), use_container_width=True)
+    df_pred, err = sample_predictions(model_obj)
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        try:
+            plot_price_distribution(load_data(), last)
+        except Exception as exc:
+            st.info(f"Preisverteilung nicht verfügbar: {exc}")
+    with c2:
+        if err:
+            st.info(err)
+        elif not df_pred.empty:
+            plot_actual_vs_predicted(df_pred, last)
 
-with st.expander("ℹ️ Über das Modell"):
-    st.markdown(f"""
-- **Pipeline:** `RentPredictor` aus `model_v3_clean.ipynb`, Kapitel 24.2
-- **Modell:** `{type(predictor.model).__name__}`
-- **Features:** {len(predictor.feature_cols)} (inkl. Geo-Cluster & KNN-Distance-Features)
-- **Trainings-Daten:** ~4'500 Schweizer Mietwohnungen aus `model.csv`
-- **Random State:** {predictor.random_state}
+    st.markdown("### Modellvergleich aus Projekt-Evaluation")
+    st.dataframe(MODEL_COMPARISON, width="stretch", hide_index=True)
 
-**Wichtig:** Diese Schätzung ist **nicht rechtsverbindlich**.
-Sie ist als Marktanalyse-Tool gedacht, nicht als Gutachten oder Mietzins-Berechnung.
-    """)
+    if not df_pred.empty:
+        try:
+            from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, median_absolute_error
+            y = df_pred["price"].values
+            p = df_pred["predicted"].values
+            sample_metrics = pd.DataFrame([{
+                "MAE Sample": mean_absolute_error(y, p),
+                "RMSE Sample": float(np.sqrt(mean_squared_error(y, p))),
+                "MedAE Sample": median_absolute_error(y, p),
+                "R² Sample": r2_score(y, p),
+            }])
+            st.markdown("### Live-Check auf einem Sample aus `model.csv`")
+            st.caption("Diagnosewert auf verfügbaren Daten, nicht der offizielle Hold-out-Wert.")
+            st.dataframe(sample_metrics.round(3), width="stretch", hide_index=True)
+        except Exception:
+            pass
+
+    band_df = pd.DataFrame([{"Preisband": k, "MAE CHF": v} for k, v in PROJECT_METRICS["band_mae"].items()])
+    st.markdown("### Fehler nach Preisband")
+    st.dataframe(band_df, width="stretch", hide_index=True)
+
+
+def render_model_data_page(model_meta: Dict[str, Any], model_options: list[Dict[str, Any]]) -> None:
+    st.markdown("## Modell & Daten")
+    kpi_cards([
+        ("Aktives Modell", str(model_meta.get("label", "—")), str(model_meta.get("kind", ""))),
+        ("Quelle", str(model_meta.get("source", "—")), str(model_meta.get("path", ""))[:80]),
+        ("Datenpfad", "model.csv", str(DATA_PATH)),
+        ("Version", APP_VERSION, "sichtbarer Script-Check"),
+    ])
+
+    st.markdown("### Gefundene Modell-Artefakte")
+    rows = [{"Label": opt["label"], "Pfad": str(opt.get("path") or "Default Auto-Cache"), "Default": bool(opt.get("is_default"))} for opt in model_options]
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    st.markdown("### Modell-Metadaten")
+    st.json({k: v for k, v in model_meta.items() if k not in ("features",)})
+    if model_meta.get("features"):
+        st.write(model_meta.get("features"))
+
+    with st.expander("Datenvorschau `model.csv`"):
+        try:
+            df = load_data()
+            st.dataframe(df.head(25), width="stretch")
+            st.write(f"Zeilen: {len(df):,} · Spalten: {len(df.columns):,}".replace(",", "'"))
+        except Exception as exc:
+            st.error(f"Daten konnten nicht geladen werden: {exc}")
+
+
+def render_manual_sidebar_prediction(model_obj: Any) -> None:
+    st.sidebar.header("🏢 Manuelle Schätzung")
+    area = st.sidebar.slider("Wohnfläche (m²)", 20, 250, 75)
+    rooms = st.sidebar.slider("Zimmer", 1, 8, 3)
+    year_built = st.sidebar.slider("Baujahr", 1900, 2026, 1990)
+
+    st.sidebar.header("🏗️ Gebäude")
+    apartments = st.sidebar.slider("Wohnungen im Gebäude", 1, 100, 8)
+    land_area = st.sidebar.slider("Grundstücksfläche (m²)", 50, 2000, 300)
+
+    st.sidebar.header("📍 Lage")
+    presets = {
+        "Zürich (HB)": (2683000, 1247000, 408),
+        "Bern (HB)": (2600000, 1200000, 540),
+        "Luzern (HB)": (2666000, 1211000, 435),
+        "Genf (HB)": (2500000, 1118000, 375),
+        "Basel (SBB)": (2611000, 1267000, 270),
+        "Lugano (Centro)": (2717500, 1095500, 273),
+        "Zermatt": (2624500, 1097000, 1620),
+        "Custom": None,
+    }
+    preset = st.sidebar.selectbox("Stadt-Preset", list(presets.keys()))
+    east_d, north_d, elev_d = presets[preset] or (2683000, 1247000, 408)
+    east = st.sidebar.number_input("LV95 East", value=east_d, step=1000)
+    north = st.sidebar.number_input("LV95 North", value=north_d, step=1000)
+    elevation = st.sidebar.number_input("Höhe (m ü. M.)", value=elev_d, step=10)
+
+    st.sidebar.header("🌍 Lagedaten")
+    population = st.sidebar.slider("Bevölkerung Hektar", 1, 600, 100)
+    oev = st.sidebar.slider("ÖV-Erschliessung (Score)", 0, 100000, 4000)
+    solar = st.sidebar.slider("Solar-Klasse (1=schlecht, 5=top)", 1, 5, 3)
+
+    input_df = pd.DataFrame([{
+        "east": east, "north": north, "elevation": elevation, "area": area,
+        "rooms": rooms, "year_built": year_built, "apartments": apartments,
+        "land_area": land_area, "population": population, "oev": oev, "solar": solar,
+    }])
+
+    try:
+        pred = float(safe_predict(model_obj, input_df)[0])
+        st.sidebar.metric("Manuelle Kaltmiete", fmt_chf(pred), f"{pred / area:.0f} CHF/m²")
+    except Exception as exc:
+        st.sidebar.warning(f"Manuelle Schätzung nicht verfügbar: {type(exc).__name__}")
+
+
+# ---- App Start ----
+st.set_page_config(
+    page_title="Mietpreis-Schätzer Schweiz",
+    page_icon="🏠",
+    layout="wide",
+)
+
+inject_css()
+hero()
+
+# Session defaults
+st.session_state.setdefault("lookup_egid_info", None)
+st.session_state.setdefault("lookup_dwellings", [])
+st.session_state.setdefault("lookup_address", "")
+st.session_state.setdefault("lookup_area", 75)
+st.session_state.setdefault("lookup_rooms", 3.0)
+st.session_state.setdefault("lookup_floor", "—")
+st.session_state.setdefault("dwelling_selector_idx", 0)
+st.session_state.setdefault("auto_lookup_address", None)
+
+model_options = discover_model_options()
+model_option_map = {m["key"]: m for m in model_options}
+
+selected_model_key = st.sidebar.selectbox(
+    "🤖 Modell auswählen",
+    [m["key"] for m in model_options],
+    index=0,
+    format_func=lambda k: model_option_map[k]["label"],
+)
+
+try:
+    predictor, model_meta = load_selected_predictor(selected_model_key)
+except FileNotFoundError as e:
+    st.error(str(e))
+    st.stop()
+except Exception as e:
+    st.error(f"Modell konnte nicht geladen werden: {type(e).__name__}: {e}")
+    st.stop()
+
+st.sidebar.success(f"Modell aktiv: {model_meta.get('label')} · {model_meta.get('kind', 'Model')}")
+st.sidebar.caption(f"{APP_VERSION} · Script OK")
+st.sidebar.divider()
+
+render_manual_sidebar_prediction(predictor)
+
+page = st.radio(
+    "Navigation",
+    ["Schätzung", "Model Performance", "Modell & Daten"],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="top_navigation",
+)
+
+if page == "Schätzung":
+    render_prediction_page(predictor, model_meta)
+elif page == "Model Performance":
+    render_performance_page(predictor, model_meta)
+else:
+    render_model_data_page(model_meta, model_options)
