@@ -52,8 +52,6 @@
 \usepackage[numbers]{natbib}
 
 % ---------- Helper: report figures ----------
-% All figures referenced below are included in the submission package.
-% Missing notebook-only diagnostics were removed from the report instead of shown as placeholders.
 \newcommand{\autofigure}[6]{%
 \begin{figure}[H]
     \centering
@@ -63,10 +61,6 @@
 \end{figure}
 }
 
-% ---------- Helper: draft note ----------
-\newcommand{\draftnote}[1]{%
-{\small\itshape\textcolor{textGray}{[Draft note: #1]}}%
-}
 
 \begin{document}
 
@@ -169,7 +163,7 @@ Real-estate and rental-price prediction has been studied for a long time in both
 
 Modern machine-learning approaches use more flexible models instead of manually specifying all relationships. Tree-based ensembles such as RandomForest~\citep{breiman2001randomforest} and gradient boosting~\citep{friedman2001gbm} are particularly well suited for tabular regression. They can capture non-linear interactions, handle features with different scales and usually require only limited preprocessing. Optimised implementations such as XGBoost~\citep{chen2016xgboost} and LightGBM~\citep{ke2017lightgbm} add efficient training and regularisation, and often perform strongly on tabular benchmarks~\citep{shwartz2022tabular}.
 
-Because rent estimates may influence real decisions, interpretability is important. SHAP values provide feature-attribution explanations for individual predictions and are commonly used together with tree-based models~\citep{lundberg2017shap}. For documenting the dataset and model, we follow the ideas of \emph{Datasheets for Datasets}~\citep{gebru2021datasheets} and \emph{Model Cards}~\citep{mitchell2019modelcards}.
+Because rent estimates may influence real decisions, interpretability is important. We rely on permutation importance, impurity-based importance and partial dependence plots, which are standard tools for tree-based regression. For documenting the dataset and model, we follow the ideas of \emph{Datasheets for Datasets}~\citep{gebru2021datasheets} and \emph{Model Cards}~\citep{mitchell2019modelcards}.
 
 For the Swiss housing market specifically, two public data sources are critical: the Federal Register of Buildings and Dwellings (GWR), maintained by the Federal Statistical Office (BFS)~\citep{bfsGwr}, and the swisstopo geo-services exposed through GeoAdmin~\citep{geoAdminApi}. The GWR provides per-building attributes (construction year, number of dwellings, building footprint) indexed by EGID, while swisstopo provides geo-layer attributes such as public-transport accessibility~\citep{areOevKlassen}, solar-suitability classes from the Federal Office of Energy (BFE)~\citep{bfeSolar}, and the BFS population-by-hectare grid~\citep{bfsPopulation}.
 
@@ -210,13 +204,13 @@ The raw and enriched data are stored in a PostgreSQL database on Neon Console. T
 {0.85\linewidth}
 {5.5cm}
 {Geographic distribution of the 4'500 modelling-set apartments across Switzerland, colored by cold rent. Urban centres (Zurich, Geneva, Basel) are clearly visible and overrepresented.}
-{Geographic distribution of listings colored by cold rent.}
+{\textbf{Geographic distribution of cold rents.} The map shows the 4,500 modelling-set apartments across Switzerland, coloured by cold rent. Urban centres such as Zurich, Geneva, Basel and Lausanne appear as both dense and expensive clusters. \textit{Source: Own data extraction from \texttt{rentumo.ch} enriched with GWR and swisstopo coordinates; notebook export, Chapter~6.}}
 {fig:geo}
 
 \subsection{Quality Assessment}
 \begin{itemize}
     \item \textbf{Completeness.} Listings missing any of \texttt{address}, \texttt{price\_cold}, \texttt{area\_sqm}, or \texttt{rooms} are removed entirely. Listings marked ``Preis auf Anfrage'' are also removed. Of the 9\,994 scraped listings, approximately 4\,500 remain after the mandatory-field filter and the GWR/swisstopo join (cumulative loss is diagnosed in \texttt{final\_records.ipynb}).
-    \item \textbf{Accuracy.} An explicit outlier filter (\texttt{area\_sqm}\,$\geq$\,10, \texttt{price\_cold}\,$\geq$\,300) removes implausible listings. An \texttt{IsolationForest} diagnostic (Notebook Chapter~22.9) surfaces additional candidates for manual review.
+    \item \textbf{Accuracy.} An explicit outlier filter (\texttt{area\_sqm}\,$\geq$\,10, \texttt{price\_cold}\,$\geq$\,300) removes implausible listings (Notebook Chapter~5).
     \item \textbf{Consistency.} Cantons are normalised to ISO~3166-2:CH (\texttt{ZH}, \texttt{BE}, $\ldots$). The construction year is stored as a four-digit integer; missing GWR values are median-imputed.
     \item \textbf{Timeliness.} The dataset is a single point-in-time snapshot from 13 April 2026. Temporal price changes after that date are not reflected; time-series modelling is explicitly out of scope.
 \end{itemize}
@@ -233,10 +227,10 @@ No personal data is collected. Landlord names and contact details are explicitly
 \label{sec:methods}
 
 \subsection{Pipeline Overview}
-The modelling pipeline is implemented in \texttt{src/notebooks/model\_v3\_clean.ipynb}. The notebook follows the same order as the analysis itself: clean the modelling table, build a baseline, compare model families, add location-aware features, diagnose overfitting, and then choose the model that generalises most consistently. The end-to-end prediction logic is wrapped in a \texttt{RentPredictor} Python class (Notebook Chapter~24.2), saved with \texttt{joblib}, and reused by the Streamlit app. The final saved model is \texttt{models/gradient\_boosting\_all\_geo.joblib}: a \texttt{GradientBoostingRegressor} trained on the \texttt{ALL+geo} feature set.
+The modelling pipeline is implemented in \texttt{src/notebooks/model\_v3\_clean.ipynb}. The notebook follows the same order as the analysis itself: clean the modelling table, build a baseline, compare model families, add location-aware features, diagnose overfitting, and then choose the model that generalises most consistently. The end-to-end prediction logic is wrapped in a \texttt{RentPredictor} Python class (Notebook Chapter~23.1), saved with \texttt{joblib}, and reused by the Streamlit app. The final saved model is \texttt{models/gradient\_boosting\_all\_geo.joblib}: a \texttt{GradientBoostingRegressor} trained on the \texttt{ALL+geo} feature set.
 
 \subsection{Train/Eval/Test Split}
-We use a fixed random seed (\texttt{random\_state=42}) to make the split reproducible. The main experiments use an 80\% training set and a 20\% evaluation set. For the final hold-out check (Notebook Chapter~24.6), we additionally use a 60/20/20 train/validation/test split. The evaluation and test sets are not used for model fitting. A Kolmogorov-Smirnov test (Chapter~22.13) is used to check that the random split does not introduce a strong distribution shift between training and evaluation data.
+We use a fixed random seed (\texttt{random\_state=42}) to make the split reproducible. The main experiments use an 80\% training set and a 20\% evaluation set. For the final hold-out check (Notebook Chapter~21.5), we additionally use a 60/20/20 train/validation/test split. The evaluation and test sets are not used for model fitting.
 
 \subsection{Feature Engineering}
 In addition to the raw features, three engineered features are added (Chapter~6):
@@ -246,8 +240,8 @@ In addition to the raw features, three engineered features are added (Chapter~6)
 Two further feature groups are created using only \texttt{train\_df}, so that information from the evaluation set does not leak into training:
 
 \begin{itemize}
-    \item \textbf{Geo-clusters.} \texttt{KMeans} on standardised LV95 coordinates produces a discrete \texttt{geo\_cluster} feature (Chapter~21). The number of clusters is tuned on Eval RMSE.
-    \item \textbf{KNN-distance features.} For each apartment, the median price of its 10 nearest neighbours in coordinate space (\texttt{knn\_price\_median}) and the corresponding mean (\texttt{knn\_price\_mean}) are added (Chapter~23.12). The nearest-neighbour index is fit on training data only; eval points query against the training index.
+    \item \textbf{Geo-clusters.} \texttt{KMeans} on standardised LV95 coordinates produces a discrete \texttt{geo\_cluster} feature (Chapter~19). The number of clusters is tuned on Eval RMSE.
+    \item \textbf{KNN-distance features.} For each apartment, the median price of its 10 nearest neighbours in coordinate space (\texttt{knn\_price\_median}) and the corresponding mean (\texttt{knn\_price\_mean}) are added (Chapter~21.11). The nearest-neighbour index is fit on training data only; eval points query against the training index.
 \end{itemize}
 
 The final feature set is \texttt{ALL+geo}. It keeps the tabular signal from the apartment, building and location enrichments and adds the discrete \texttt{geo\_cluster}. The geo-cluster is kept because Swiss rents are strongly spatial: even if it does not change every single prediction dramatically, it gives the model a compact way to represent local market segments.
@@ -257,32 +251,32 @@ The final feature set is \texttt{ALL+geo}. It keeps the tabular signal from the 
 {0.78\linewidth}
 {5cm}
 {Visualisation of the KMeans geo-clusters fitted on \texttt{train\_df} only. Each colour corresponds to one \texttt{geo\_cluster} category that is consumed by the tree models as a discrete feature.}
-{KMeans geo-clusters used as a categorical location feature (Notebook Chapter~21.4). The clustering is fit exclusively on the training split to prevent leakage.}
+{KMeans geo-clusters used as a categorical location feature (Notebook Chapter~19.4). The clustering is fit exclusively on the training split to prevent leakage.}
 {fig:geo-clusters}
 
 \subsection{Models}
-We compare six model families on the same data split. Where necessary, the models are wrapped in an \texttt{sklearn.Pipeline}. The comparison includes a \textbf{DummyRegressor} as a lower bound, a \textbf{Ridge} model with scaling as a simple linear benchmark, and four tree-based approaches: \textbf{RandomForestRegressor}, \textbf{GradientBoostingRegressor}, \textbf{XGBoost} and \textbf{LightGBM}. In Chapter~23.2, we also add a \textbf{StackingRegressor} with a Ridge meta-learner over the strongest tree-based models.
+We compare six model families on the same data split. Where necessary, the models are wrapped in an \texttt{sklearn.Pipeline}. The comparison includes a \textbf{DummyRegressor} as a lower bound, a \textbf{Ridge} model with scaling as a simple linear benchmark, and four tree-based approaches: \textbf{RandomForestRegressor}, \textbf{GradientBoostingRegressor}, \textbf{XGBoost} and \textbf{LightGBM}. In Chapter~21.4, we also add a \textbf{StackingRegressor} with a Ridge meta-learner over the strongest tree-based models.
 
 The model choice is not made by evaluation RMSE alone. LightGBM is the best raw-accuracy benchmark, but its train/eval gap is visibly larger. Among the geo-enabled candidates, \textbf{GradientBoosting with \texttt{ALL+geo}} gives the most balanced result: accurate enough for the task, less prone to overfitting, and easier to explain in the report.
 
-Hyperparameters are tuned with \texttt{RandomizedSearchCV} (Chapter~22.3) and the faster \texttt{HalvingRandomSearchCV} (Chapter~23.10). To avoid scikit-learn's nested-parallelism trap, the inner estimator is set to \texttt{n\_jobs=1} while only the outer search uses \texttt{n\_jobs=-1}.
+Hyperparameters are tuned with \texttt{RandomizedSearchCV} (Chapter~21.1) and the faster \texttt{HalvingRandomSearchCV} (Chapter~21.2). To avoid scikit-learn's nested-parallelism trap, the inner estimator is set to \texttt{n\_jobs=1} while only the outer search uses \texttt{n\_jobs=-1}.
 
 \subsection{Experimental Features and Testing Milestones}
 The pipeline was not designed in one step. It developed through a sequence of experimental milestones, where each result influenced the next decision. A new feature, model or diagnostic was kept only if it improved accuracy, stability, interpretability, or the evidence behind the final model choice.
 
 \begin{itemize}
-    \item \textbf{M1 -- Baselines (Chapters~1--12).} Establish the modelling problem, fix the split, run a \texttt{DummyRegressor} and a Ridge baseline, and confirm that tree-based models clearly beat both. This milestone defines the lower bound everything else must beat.
-    \item \textbf{M2 -- Location as signal (Chapter~21).} Add KMeans \texttt{geo\_cluster} and explore DBSCAN as a diagnostic. The KMeans cluster is kept because apartment rents are spatial by nature and because the feature makes local market segments explicit.
-    \item \textbf{M3 -- Main model comparison.} Compare RandomForest, GradientBoosting, XGBoost and LightGBM on the same split. LightGBM gives the lowest evaluation RMSE, while GradientBoosting has the much smaller train/eval gap. This is the first point where we stop treating the lowest RMSE as the only decision rule.
-    \item \textbf{M4 -- Final geo decision.} The geo-enabled comparison confirms the final choice: \texttt{GradientBoosting} with \texttt{ALL+geo}. The model is slightly less aggressive than LightGBM, but the smaller overfitting gap makes it easier to defend as a final model.
-    \item \textbf{M5 -- Diagnostics and stress tests.} Tuning, stacking, KNN-distance features, PDPs, bootstrap intervals and residual plots are used to check whether an alternative clearly beats the final choice; SHAP and learning-curve checks are used as notebook-level sanity checks. These experiments are treated as stress tests, not automatic replacements.
-    \item \textbf{M6 -- Regularisation and wide pipeline (Chapters~27--28).} Two follow-up experiments target the residual overfit gap: a regularised LightGBM on reduced feature sets and a \emph{wide} pipeline trained on $\sim$9.5k rows with fewer predictors. Both are kept as comparison models, while the final model remains GradientBoosting with \texttt{ALL+geo}.
+    \item \textbf{M1, Baselines (Chapters~1--12).} Establish the modelling problem, fix the split, run a \texttt{DummyRegressor} and a Ridge baseline, and confirm that tree-based models clearly beat both. This milestone defines the lower bound everything else must beat.
+    \item \textbf{M2, Location as signal (Chapter~19).} Add KMeans \texttt{geo\_cluster} and explore DBSCAN as a diagnostic. The KMeans cluster is kept because apartment rents are spatial by nature and because the feature makes local market segments explicit.
+    \item \textbf{M3, Main model comparison.} Compare RandomForest, GradientBoosting, XGBoost and LightGBM on the same split. LightGBM gives the lowest evaluation RMSE, while GradientBoosting has the much smaller train/eval gap. This is the first point where we stop treating the lowest RMSE as the only decision rule.
+    \item \textbf{M4, Final geo decision.} The geo-enabled comparison confirms the final choice: \texttt{GradientBoosting} with \texttt{ALL+geo}. The model is slightly less aggressive than LightGBM, but the smaller overfitting gap makes it easier to defend as a final model.
+    \item \textbf{M5, Diagnostics and stress tests.} Tuning, stacking, KNN-distance features, PDPs, bootstrap intervals and residual plots are used to check whether an alternative clearly beats the final choice; learning curves and residual maps are kept as notebook-level sanity checks. They are used to understand the model, not as automatic reasons to change the final choice.
+    \item \textbf{M6, Regularisation and wide pipeline (Chapters~25--26).} Two follow-up experiments target the residual overfit gap: a regularised LightGBM on reduced feature sets and a \emph{wide} pipeline trained on $\sim$9.5k rows with fewer predictors. Both are kept as comparison models, while the final model remains GradientBoosting with \texttt{ALL+geo}.
 \end{itemize}
 
 Features that did not clear their milestone criterion (log-target inverse transform, DBSCAN cluster as a model feature, several stacking configurations) are retained in the notebook for transparency, but they are explicitly \emph{not} part of the final pipeline.
 
 \subsection{Evaluation Metrics}
-As defined in the project proposal, the main metrics are MAE, RMSE and R$^2$. RMSE is calculated as \texttt{np.sqrt(mean\_squared\_error(...))}, which keeps the code compatible across scikit-learn versions. The notebook also reports MedAE as a more robust error metric, the standard deviation of CV-RMSE across folds as a stability indicator, and bootstrap 95\% confidence intervals for RMSE on the evaluation set (Chapter~23.5). For model selection, we report evaluation RMSE but do not treat it as the only decision rule. The final decision also considers the train/eval overfitting gap and cross-validation stability, so that a model is not chosen only because it performs best on one favourable split.
+As defined in the project proposal, the main metrics are MAE, RMSE and R$^2$. RMSE is calculated as \texttt{np.sqrt(mean\_squared\_error(...))}, which keeps the code compatible across scikit-learn versions. The notebook also reports MedAE as a more robust error metric, the standard deviation of CV-RMSE across folds as a stability indicator, and bootstrap 95\% confidence intervals for RMSE on the evaluation set (Chapter~21.7). For model selection, we report evaluation RMSE but do not treat it as the only decision rule. The final decision also considers the train/eval overfitting gap and cross-validation stability, so that a model is not chosen only because it performs best on one favourable split.
 
 % =========================================================
 \section{Results}
@@ -297,7 +291,7 @@ Table~\ref{tab:models} summarises the main model comparison on the engineered fe
 \begin{table}[h]
 \centering
 \small
-\caption{Model comparison on the engineered feature set (Notebook Chapter~10c). RMSE values are in CHF on the held-out evaluation split. The final decision favours GradientBoosting because it has the best generalisation profile among the strong tree-based candidates.}
+\caption{Model comparison on the engineered feature set. RMSE values are in CHF on the held-out evaluation split. The final decision favours GradientBoosting because it has the best generalisation profile among the strong tree-based candidates. \textit{Source: Own modelling results; notebook Chapter~10.}}
 \label{tab:models}
 \begin{tabular}{lrrrrl}
 \toprule
@@ -318,10 +312,10 @@ Dummy (median)   & 737  & 799 & $-0.03$ & 62 & Baseline \\
 {0.85\linewidth}
 {4.5cm}
 {Bar plot: RMSE Train vs.\ RMSE Eval per model.}
-{Train vs.\ Eval RMSE per model. The large gap for LightGBM, XGBoost, and RandomForest is a clear sign of overfitting on the training data; GradientBoosting strikes the best balance between evaluation RMSE and stability.}
+{\textbf{Train vs. evaluation RMSE.} The large gap for LightGBM, XGBoost and RandomForest indicates overfitting on the training data; GradientBoosting gives the best balance between evaluation RMSE and stability. \textit{Source: Own model comparison on the fixed evaluation split; notebook export, Chapter~10.}}
 {fig:rmse-bars}
 
-If the only goal were to minimise evaluation RMSE on this one split, \emph{LightGBM} would win. After adding KNN-distance features, this benchmark improves further to about \textbf{RMSE Eval\,=\,393 CHF and R$^2$\,=\,0.751} (Notebook Chapter~23.17). However, this is not enough for the final decision. The chosen model should also behave consistently between train and evaluation data.
+If the only goal were to minimise evaluation RMSE on this one split, \emph{LightGBM} would win. After adding KNN-distance features, this benchmark improves further to about \textbf{RMSE Eval\,=\,393 CHF and R$^2$\,=\,0.751} (Notebook Chapter~22.2). However, this is not enough for the final decision. The chosen model should also behave consistently between train and evaluation data.
 
 For that reason, the final model is \textbf{GradientBoosting with \texttt{ALL+geo}}. Its evaluation RMSE is slightly higher than the most aggressive LightGBM variant, but the much smaller overfitting gap makes it the safer choice. We trade a small amount of headline accuracy for a model whose train and evaluation behaviour is more consistent.
 
@@ -332,10 +326,12 @@ The project hypothesis was that a tree-based model would outperform a linear reg
 {bootstrap_ci.png}
 {0.85\linewidth}
 {4.5cm}
-{Forest plot of bootstrap 95\% confidence intervals for evaluation RMSE per model (Notebook Chapter~23.5). Overlapping intervals indicate model differences that are not statistically significant.}
-{Bootstrap confidence intervals for evaluation RMSE per model. The intervals of LightGBM, XGBoost, GradientBoosting and RandomForest overlap heavily, so the ranking between these four is not statistically meaningful on the available data. This supports the decision to prefer GradientBoosting's smaller overfitting gap over LightGBM's marginal RMSE lead.}
+{Forest plot of bootstrap 95\% confidence intervals for evaluation RMSE per model (Notebook Chapter~21.7). Overlapping intervals indicate model differences that are not statistically significant.}
+{\textbf{Bootstrap confidence intervals for evaluation RMSE.} The intervals of LightGBM, XGBoost, GradientBoosting and RandomForest overlap heavily, so the ranking between these models is not statistically decisive on the available data. This supports the decision to prefer GradientBoosting's smaller overfitting gap over LightGBM's marginal RMSE lead. \textit{Source: Own bootstrap analysis; notebook export, Chapter~21.7.}}
 {fig:bootstrap-ci}
 
+\paragraph{Learning-curve check.}
+The notebook also contains a learning-curve diagnostic. It plots the training and cross-validation RMSE for increasing training-set sizes and was mainly used to answer a practical question: does the model still improve when more data is added, or is the remaining error mostly caused by missing information in the features? The curves still show a visible train/CV gap, which means the strongest models do not simply need more tuning; they also need better information about rare and expensive listings. This supports the final choice of GradientBoosting: it does not have the lowest headline RMSE, but it gives a more stable train/evaluation relationship than the most aggressive LightGBM and XGBoost variants.
 
 \subsection{Actual vs.\ Predicted and Residuals}
 
@@ -344,7 +340,7 @@ The project hypothesis was that a tree-based model would outperform a linear reg
 {0.88\linewidth}
 {4.5cm}
 {Actual-vs.\ predicted diagnostic plot generated by the notebook export cell (\texttt{fig/actual\_vs\_predicted.png}).}
-{Actual vs.\ predicted cold rent on the evaluation set for the selected tree-based pipeline. Points clustering near the diagonal indicate accurate predictions; the spread widens for higher-priced apartments, hinting at the heteroscedasticity that is examined more closely in Figure~\ref{fig:qq}.}
+{\textbf{Actual vs. predicted cold rent.} Points close to the red diagonal indicate accurate predictions. The cloud becomes wider for expensive listings, which is the first visual sign that the model is less reliable at the top of the market. \textit{Source: Own evaluation diagnostics on the held-out split; notebook export, Chapter~14.}}
 {fig:actual-pred}
 
 \autofigure
@@ -352,24 +348,24 @@ The project hypothesis was that a tree-based model would outperform a linear reg
 {0.88\linewidth}
 {4.5cm}
 {Residual diagnostic plot generated by the notebook export cell (\texttt{fig/residuals.png}).}
-{Residual analysis for the selected final model: residuals against predicted rent and the residual distribution. The red zero reference line makes systematic under- or over-prediction easier to see; the visible funnel shape confirms that the error grows with the predicted price.}
+{\textbf{Residual diagnostics.} The red zero reference line makes systematic under- or over-prediction visible. The funnel shape confirms that prediction errors grow with predicted rent, especially for expensive apartments. \textit{Source: Own residual analysis on the held-out evaluation split; notebook export, Chapter~21.5.}}
 {fig:residuals}
 
-The residual diagnostics show that the errors are not normally distributed. The Q-Q plot and Shapiro--Wilk test (Chapter~23.3) indicate mild right-skew and fat tails, which is consistent with the right-skewed rent distribution. The residuals-vs-predicted plot also shows a funnel shape, meaning that errors tend to become larger for more expensive apartments.
+The residual diagnostics are shown for the strongest tree-based benchmark and are used as a diagnostic for the model family as a whole. The errors are not normally distributed: the Q-Q plot and Shapiro--Wilk test (Chapter~21.5) indicate mild right-skew and fat tails, which is consistent with the right-skewed rent distribution. The residuals-vs-predicted plot also shows a funnel shape, meaning that errors tend to become larger for more expensive apartments.
 
 \autofigure
 {qq_plot.png}
 {0.78\linewidth}
 {4cm}
-{Q-Q plot of the residuals against a normal reference distribution (Notebook Chapter~23.3). Deviations in the tails confirm the non-normality of the errors.}
-{Q-Q plot of the residuals. Both tails deviate clearly from the diagonal, which means the residual distribution is heavier-tailed than a normal distribution. This is a typical pattern for right-skewed price data.}
+{Q-Q plot of the residuals against a normal reference distribution (Notebook Chapter~21.5). Deviations in the tails confirm the non-normality of the errors.}
+{\textbf{Q-Q plot of residuals.} Both tails deviate from the diagonal, meaning the residual distribution is heavier-tailed than a normal distribution. This is typical for right-skewed price data. \textit{Source: Own residual-normality check; notebook export, Chapter~21.5.}}
 {fig:qq}
 
 \subsection{Error Analysis by Price Band}
 \begin{table}[h]
 \centering
 \small
-\caption{Per-quartile error analysis for the selected tree-based pipeline on the eval set (Notebook Chapter~16). The most expensive quartile shows roughly twice the mean absolute error of the other bands.}
+\caption{Per-quartile error analysis for the selected tree-based pipeline on the evaluation set. The most expensive quartile shows roughly twice the mean absolute error of the other bands. \textit{Source: Own price-band analysis; notebook Chapter~16.}}
 \label{tab:priceband}
 \begin{tabular}{lrrrr}
 \toprule
@@ -390,7 +386,7 @@ This is one of the most useful findings of the analysis. The model performs noti
 {0.78\linewidth}
 {4cm}
 {Bar plot of the mean absolute error per price quartile, computed on the evaluation set (Notebook Chapter~16). The most expensive quartile stands out with an error roughly twice as large as in the other bands.}
-{Mean absolute error per price quartile. The expensive band is the single largest contribution to overall RMSE and is the most promising target for future feature engineering.}
+{\textbf{Mean absolute error by price quartile.} The expensive band contributes most to overall RMSE and is therefore the most important target for future feature engineering. \textit{Source: Own price-band error analysis; notebook export, Chapter~16.}}
 {fig:error-band}
 
 \subsection{Feature Importance}
@@ -399,7 +395,7 @@ This is one of the most useful findings of the analysis. The model performs noti
 {0.9\linewidth}
 {4.5cm}
 {Feature-importance comparison: RF Impurity vs.\ LightGBM Split vs.\ Permutation Importance, as heatmap.}
-{Feature-importance comparison across methods (Notebook Chapter~23.8). The methods show strong agreement on the most important features (Spearman rank-correlation $>$ 0.85).}
+{\textbf{Feature-importance comparison.} The different importance methods agree strongly on the main drivers of rent, especially area and location-related variables (Spearman rank-correlation $>$ 0.85). \textit{Source: Own feature-importance analysis; notebook export, Chapter~21.9.}}
 {fig:fi}
 
 The feature-importance results are consistent across the different methods. \emph{Living area} (\texttt{area}), the two \emph{KNN price features}, and the \emph{location coordinates} (\texttt{east}, \texttt{north}) provide most of the predictive signal. One interesting result is that \texttt{rooms} is less important than \texttt{area\_per\_room}, suggesting that the size distribution within the apartment is more informative than the room count alone. In the heatmap, the most important features are placed at the top of the figure (descending order); this reflects how a reader naturally scans the plot and avoids having to read it bottom-up to find the actually important features.
@@ -408,8 +404,8 @@ The feature-importance results are consistent across the different methods. \emp
 {pdp_top6.png}
 {0.95\linewidth}
 {5cm}
-{Partial Dependence Plots for the six most important features of the tree-based benchmark model (Notebook Chapter~23.4). Each panel shows the marginal effect of one feature on the predicted cold rent.}
-{Partial Dependence Plots (PDPs) of the six most important features in the tree-based benchmark, arranged in order of importance from top-left to bottom-right (Notebook Chapter~23.4). The same feature drivers also explain the GradientBoosting final choice.}
+{Partial Dependence Plots for the six most important features of the tree-based benchmark model (Notebook Chapter~21.6). Each panel shows the marginal effect of one feature on the predicted cold rent.}
+{\textbf{Partial dependence of the six main features.} The panels show how the predicted rent changes when one feature is varied while the remaining features are averaged out. The same size and location drivers also explain the GradientBoosting final choice. \textit{Source: Own PDP analysis; notebook export, Chapter~21.6.}}
 {fig:pdp}
 
 The six panels of Figure~\ref{fig:pdp} are arranged in descending order of importance: the top-left panel (\texttt{area}) is the strongest single predictor and the bottom-right panel (\texttt{oev}) is the weakest of the six. On each panel the $y$-axis shows the model's predicted cold rent in CHF, the $x$-axis shows the value of the feature, and the curve indicates how the prediction moves when \emph{only} that feature is varied while all others are averaged out.
@@ -420,14 +416,11 @@ The \emph{bottom row} captures \emph{how} the apartment is positioned within its
 
 The take-away is not just that the top-left panel has the steepest curve, but that the model captures all six of these effects, including the non-linear ones like the Zurich peak in \texttt{east} and the new-build effect in \texttt{year\_built}. This is the main reason the tree-based family clearly outperforms the linear baseline on this dataset.
 
-As a final interpretability sanity check, SHAP values were inspected in the notebook as well. They confirmed the same direction as the feature-importance and PDP views: larger living area, stronger local price signal and favourable location coordinates increase predicted rent. Since SHAP did not change the model decision, the report keeps the more compact interpretability evidence in Figures~\ref{fig:fi} and~\ref{fig:pdp}.
-
-
 \subsection{Cross-Validation and Stability}
 Five-fold KFold cross-validation with shuffling confirms the same picture: tree-based models are clearly stronger than the linear benchmark, while the differences between the tree models are relatively small. The CV-RMSE standard deviation is below 30~CHF for all tree-based models, while Ridge is above 50~CHF. The bootstrap 95\% confidence intervals for evaluation RMSE also overlap strongly for LightGBM, XGBoost, RandomForest and GradientBoosting. Because the raw-RMSE ranking is not statistically clear, the smaller train/eval gap of GradientBoosting becomes the more convincing argument.
 
 \subsection{Hold-Out Test (untouched until the very end)}
-As a final check, we use a separate 60/20/20 train/validation/test split and refit the selected \texttt{GradientBoosting} pipeline on train+validation. The test set is kept untouched until the end. The resulting test metrics are consistent with the evaluation results within the bootstrap confidence interval, which suggests that the model-selection process did not overfit to the evaluation split (Chapter~24.6).
+As a final check, we use a separate 60/20/20 train/validation/test split and refit the selected \texttt{GradientBoosting} pipeline on train+validation. The test set is kept untouched until the end. The resulting test metrics are consistent with the evaluation results within the bootstrap confidence interval, which suggests that the model-selection process did not overfit to the evaluation split (Chapter~23.3).
 
 \subsection{Regularisation and Dataset/Model Strategy Comparison}
 \label{sec:regularised}
@@ -444,12 +437,12 @@ The regularised LightGBM variants are useful comparison models, especially for s
 
 \subsection{Wide Pipeline: More Rows, Fewer Features}
 \label{sec:wide}
-Chapter~28 of the notebook adds a complementary experiment. The standard pipeline (used in Section~\ref{sec:results}) joins the four data tables and requires \emph{all} mandatory GWR and swisstopo fields, which leaves about 4{,}500 modelling rows. If we instead drop the strict enrichment requirement and only keep listings with \texttt{area}, \texttt{rooms}, \texttt{east}, \texttt{north} and \texttt{price\_cold}, we can train on roughly 9{,}400 rows -- more than double the data, but with only four predictors plus the engineered \texttt{knn\_price\_median}.
+Chapter~26 of the notebook adds a complementary experiment. The standard pipeline (used in Section~\ref{sec:results}) joins the four data tables and requires \emph{all} mandatory GWR and swisstopo fields, which leaves about 4{,}500 modelling rows. If we instead drop the strict enrichment requirement and only keep listings with \texttt{area}, \texttt{rooms}, \texttt{east}, \texttt{north} and \texttt{price\_cold}, we can train on roughly 9{,}400 rows, more than double the data, but with only four predictors plus the engineered \texttt{knn\_price\_median}.
 
 \begin{table}[h]
 \centering
 \small
-\caption{Standard pipeline vs.\ Wide pipeline on a regularised LightGBM stress test (Notebook Chapter~28.4). The Wide pipeline trades evaluation accuracy for a much smaller train/eval gap and roughly twice the training set.}
+\caption{Standard pipeline vs.\ Wide pipeline on a regularised LightGBM stress test. The Wide pipeline trades evaluation accuracy for a much smaller train/eval gap and roughly twice the training set. \textit{Source: Own Wide-pipeline experiment; notebook Chapter~26.4.}}
 \label{tab:wide-vs-standard}
 \begin{tabular}{lrrrrrr}
 \toprule
@@ -468,7 +461,7 @@ The main result is that the standard enriched pipeline still wins on evaluation 
 {0.85\linewidth}
 {4.5cm}
 {Side-by-side bar comparison of the Standard and Wide pipelines: RMSE Train/Eval, R$^2$ and Overfit Gap.}
-{Side-by-side comparison of the Standard and Wide pipelines (Notebook Chapter~28.4). The Standard pipeline (left bars in each group) keeps the lower evaluation RMSE thanks to the engineered features, while the Wide pipeline (right bars) more than halves the train/eval gap by exchanging features for almost twice the training rows. The result reinforces the final-model story: robustness matters, but the final model should still retain the location-rich \texttt{ALL+geo} signal.}
+{\textbf{Standard vs. Wide pipeline.} The Standard pipeline keeps the lower evaluation RMSE thanks to the engineered features, while the Wide pipeline more than halves the train/eval gap by exchanging feature richness for almost twice the training rows. \textit{Source: Own pipeline comparison; notebook export, Chapter~26.4.}}
 {fig:wide-vs-standard}
 
 \autofigure
@@ -476,27 +469,76 @@ The main result is that the standard enriched pipeline still wins on evaluation 
 {0.85\linewidth}
 {4.5cm}
 {Actual vs.\ predicted scatter for the Wide pipeline on its own evaluation split.}
-{Actual-vs-predicted scatter for the Wide pipeline (Notebook Chapter~28.6). The diagonal is captured cleanly in the middle of the price distribution; the high-rent tail is still under-predicted, but the cloud is visibly more compact than on the Standard pipeline because the larger training set dampens single-listing outliers.}
+{\textbf{Wide-pipeline actual vs. predicted.} The middle of the price distribution is captured well, while the high-rent tail remains under-predicted. The larger dataset dampens some outliers but cannot replace the enriched location features. \textit{Source: Own Wide-pipeline evaluation; notebook export, Chapter~26.}}
 {fig:wide-actual-pred}
 
 \subsection{Worst-Case Analysis: Where the Model Fails}
 \label{sec:worst10}
-A complementary view of the error analysis from Section~\ref{sec:results} is the top-10 list of the worst absolute and relative prediction errors (Notebook Chapter~25.2). The worst absolute errors are dominated by very expensive city-centre apartments (penthouses, lake-view properties), confirming the per-quartile finding that the model systematically underestimates the top of the market. The worst relative errors look different: they tend to be small, cheap apartments where the model overshoots by a few hundred CHF, often because the listing is unusually small (e.g.\ a 25\,m$^2$ studio in a wealthy neighbourhood, where the location prior dominates). Both patterns confirm that the missing signal lives in the listing description text (floor, view, condition, furnishings), which is the most concrete entry point for further work.
+A complementary view of the error analysis from Section~\ref{sec:results} is the top-10 list of the worst absolute and relative prediction errors (Notebook Chapter~24.1). The worst absolute errors are dominated by very expensive city-centre apartments (penthouses, lake-view properties), confirming the per-quartile finding that the model systematically underestimates the top of the market. The worst relative errors look different: they tend to be small, cheap apartments where the model overshoots by a few hundred CHF, often because the listing is unusually small (e.g.\ a 25\,m$^2$ studio in a wealthy neighbourhood, where the location prior dominates). Both patterns confirm that the missing signal lives in the listing description text (floor, view, condition, furnishings), which is the most concrete entry point for further work.
 
-The geographic inspection in the notebook led to the same interpretation as the price-band table: the largest errors are concentrated in rare, expensive urban and lakeside listings. For the final report, this point is represented through the price-band analysis rather than an additional map, because the map does not change the model choice.
+\paragraph{Geographic residual check.}
+The notebook also includes a geographic residual inspection. Its message is summarised here because it helps explain \emph{where} the model fails. The largest absolute errors are not randomly spread across Switzerland. They appear mainly around the expensive urban and lakeside markets, especially the Zurich and Geneva areas. This is consistent with the price-band analysis above: the model struggles most when a listing belongs to the rare upper end of the market.
+
+This pattern is important because it changes the interpretation of the error. The problem is not that the model is generally unstable across the country. Outside the most expensive corridors, the residuals are smaller and less structured. The remaining large errors are more likely caused by missing qualitative signals (view, floor, renovation state, luxury finish or exact micro-location) than by a failure of the basic geographic features. The geographic check therefore supports the same conclusion as the worst-case table: future improvements should focus on richer listing information for premium apartments, not only on retuning the algorithm.
 
 
-\subsection{Implementation Note: Streamlit App}
+
+\subsection{Streamlit App: Visual Walkthrough}
 \label{sec:app}
-The trained pipeline was also wrapped in a small Streamlit interface for manual testing. This interface loads the same saved model artifact described in the model card; it is not a second modelling approach and it does not change the reported results.
+The trained model is also wrapped in a small Streamlit interface for manual testing. This part of the project is not a second model and it is not used to produce the reported metrics. Its role is to show how the saved \texttt{RentPredictor} can be used by a non-technical person without opening the notebook. The app loads the same model artefacts described in the model card, with \texttt{gradient\_boosting\_all\_geo.joblib} as the final report choice and the LightGBM and Wide variants kept for comparison.
 
-Because the report focuses on reproducible notebook outputs, the detailed app walkthrough and its screenshots are omitted here. The modelling figures above are the relevant evidence for the final decision: they show model accuracy, the train/eval gap, residual behaviour, price-segment errors and feature importance.
-
-For local testing, the app can still be started with:
+The screenshots below are the main documentation for the demo. Their captions include the figure title, the relevant source and the short interpretation, so the section does not repeat the same steps in paragraph form. The local command is:
 
 \begin{verbatim}
 streamlit run src/app.py
 \end{verbatim}
+
+\autofigure
+{2026-05-19_13h23_27.png}
+{0.88\linewidth}
+{6cm}
+{Step 1: model selection in the sidebar.}
+{\textbf{Step 1: Model selection.} The sidebar lists the available saved \texttt{.joblib} artefacts and confirms the active model. The final report model is \texttt{gradient\_boosting\_all\_geo.joblib}; the LightGBM, Wide and minimal variants are kept so that the same apartment can be compared under alternative modelling choices. \textit{Source: Own Streamlit app screenshot from \texttt{src/app.py}, 19 May 2026.}}
+{fig:app-model-selection}
+
+\autofigure
+{2026-05-19_13h22_41.png}
+{0.88\linewidth}
+{6cm}
+{Step 2: address search via GeoAdmin SearchServer.}
+{\textbf{Step 2: Address search.} As the user types, the GeoAdmin SearchServer suggests matching official Swiss addresses. Selecting one address returns the EGID and LV95 coordinates, which are then used to fetch the same GWR and swisstopo fields as in the training pipeline. \textit{Source: Own Streamlit app screenshot from \texttt{src/app.py}; address lookup via GeoAdmin SearchServer, 19 May 2026.}}
+{fig:app-address-search}
+
+\autofigure
+{2026-05-19_13h23_12.png}
+{0.88\linewidth}
+{6cm}
+{Step 3: dwelling selection with auto-filled structural inputs.}
+{\textbf{Step 3: Apartment selection.} If the GWR record contains several dwellings for the building, the user selects the concrete EWID. The app then pre-fills the structural inputs and shows the live cold-rent estimate, price per square metre, RMSE-based uncertainty band and price-band classification. \textit{Source: Own Streamlit app screenshot from \texttt{src/app.py}; GWR dwelling lookup, 19 May 2026.}}
+{fig:app-apartment-selection}
+
+\autofigure
+{2026-05-19_13h24_23.png}
+{0.88\linewidth}
+{6cm}
+{Step 4: model-performance view with distribution and prediction diagnostics.}
+{\textbf{Step 4: Model-performance view.} The app links the single estimate back to the modelling results. The distribution panel shows whether the estimate lies in a typical rent range, while the Actual-vs-Predicted panel reminds the user that high-rent listings have larger uncertainty. \textit{Source: Own Streamlit app screenshot from \texttt{src/app.py}; model diagnostics exported from the notebook, 19 May 2026.}}
+{fig:app-performance-view}
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}[t]{0.45\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{fig/2026-05-19_13h23_45.png}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.45\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{fig/2026-05-19_13h23_59.png}
+    \end{minipage}
+    \caption{\textbf{Manual input fallback.} The app can also be used without address search. The left panel contains structural inputs such as area, rooms, construction year and building size. The right panel contains location inputs such as city preset, LV95 coordinates, elevation, population density, public-transport accessibility and solar class. This mode is useful for hypothetical apartments and sensitivity checks. \textit{Source: Own Streamlit app screenshots from \texttt{src/app.py}, 19 May 2026.}}
+    \label{fig:app-manual-input}
+\end{figure}
 
 % =========================================================
 \section{Conclusions}
@@ -537,7 +579,6 @@ The final line of the project is straightforward: a simple baseline is not enoug
 \bibitem[Gebru et al.(2021)]{gebru2021datasheets} Gebru, T. et al. Datasheets for datasets. \emph{Communications of the ACM}, 64(12), 86--92, 2021.
 \bibitem[GeoAdmin(2024)]{geoAdminApi} Federal Office of Topography swisstopo. GeoAdmin API and Swiss federal geodata services, 2024.
 \bibitem[Ke et al.(2017)]{ke2017lightgbm} Ke, G. et al. LightGBM: A highly efficient gradient boosting decision tree. \emph{Advances in Neural Information Processing Systems}, 30, 2017.
-\bibitem[Lundberg and Lee(2017)]{lundberg2017shap} Lundberg, S. M. and Lee, S.-I. A unified approach to interpreting model predictions. \emph{Advances in Neural Information Processing Systems}, 30, 2017.
 \bibitem[Mitchell et al.(2019)]{mitchell2019modelcards} Mitchell, M. et al. Model cards for model reporting. \emph{Proceedings of the Conference on Fairness, Accountability, and Transparency}, 2019.
 \bibitem[Rentumo(2026)]{rentumo} Rentumo. Swiss rental listing platform used as source for scraped apartment advertisements, 2026.
 \bibitem[Rosen(1974)]{rosen1974hedonic} Rosen, S. Hedonic prices and implicit markets: Product differentiation in pure competition. \emph{Journal of Political Economy}, 82(1), 34--55, 1974.
