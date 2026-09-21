@@ -67,7 +67,7 @@ jobs:
         if: env.ACTION == 'deploy'
         run: |
           docker build --platform linux/amd64 -t dspro1:test .
-          docker run --rm --memory 1g --cpus 0.5 -v "$PWD/scripts/smoke_app.py:/tmp/smoke_app.py:ro" dspro1:test python /tmp/smoke_app.py
+          docker run --rm --memory 512m --cpus 0.25 -v "$PWD/scripts/smoke_app.py:/tmp/smoke_app.py:ro" dspro1:test python /tmp/smoke_app.py
       - name: Publish private image to GHCR
         if: env.ACTION == 'deploy'
         env:

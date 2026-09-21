@@ -2,7 +2,7 @@
 
 ## Gewählte Sparvariante
 
-Azure Container Apps **Consumption-only**, 0 bis 1 Instanz, 0.5 vCPU und 1 GiB RAM,
+Azure Container Apps **Consumption-only**, 0 bis 1 Instanz, 0.25 vCPU und 0.5 GiB RAM,
 HTTPS/WebSockets auf Port 8501. Ohne Log-Analytics-Workspace, Datenbank, VM,
 VNet oder kostenpflichtige dedizierte Instanz. Das Docker-Image kann in der
 privaten GitHub Container Registry (GHCR) liegen, damit keine Azure-Registry
@@ -10,7 +10,7 @@ bezahlt werden muss.
 
 Azure gewährt pro Abonnement und Monat 180'000 vCPU-Sekunden, 360'000 GiB-Sekunden
 und 2 Millionen Requests. Bei dieser Konfiguration entsprechen die beiden
-Rechen-Freimengen rechnerisch etwa 100 aktiven Stunden, sofern keine anderen
+Rechen-Freimengen rechnerisch etwa 200 aktiven Stunden, sofern keine anderen
 Apps dieselben Freimengen verbrauchen. Das ist **keine Kostenobergrenze**.
 Traffic, dauerhafte Nutzung und Builds jenseits der GitHub-Actions-Freimenge
 können kostenpflichtig sein. Der Screenshot der 12-Monats-Angebote ist keine
@@ -46,7 +46,7 @@ Funktionstest einschließlich Modellwechsel und aller Seiten:
 
 ```bash
 docker build -t dspro1-streamlit:prototype .
-docker run --rm --memory 1g --cpus 0.5 \
+docker run --rm --memory 512m --cpus 0.25 \
   -v "$PWD/scripts/smoke_app.py:/tmp/smoke_app.py:ro" \
   dspro1-streamlit:prototype python /tmp/smoke_app.py
 ```

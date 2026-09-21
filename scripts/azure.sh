@@ -68,7 +68,7 @@ IMAGE="${DEPLOY_IMAGE:-}"
 if [[ -z "$IMAGE" ]]; then
     TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)}"
     docker build --platform linux/amd64 -t "dspro1-streamlit:$TAG" .
-    docker run --rm --memory 1g --cpus 0.5 \
+    docker run --rm --memory 512m --cpus 0.25 \
         -v "$ROOT/scripts/smoke_app.py:/tmp/smoke_app.py:ro" \
         "dspro1-streamlit:$TAG" python /tmp/smoke_app.py
 fi
@@ -116,7 +116,7 @@ fi
 # create is idempotent and reconciles ingress, identity and resource limits on updates.
 azc containerapp create -g "$RG" -n "$APP" --environment "$ENVIRONMENT" \
     --image "$IMAGE" --ingress external --target-port 8501 --transport auto \
-    --cpu 0.5 --memory 1.0Gi --min-replicas 0 --max-replicas 1 \
+    --cpu 0.25 --memory 0.5Gi --min-replicas 0 --max-replicas 1 \
     --scale-rule-name http --scale-rule-type http --scale-rule-http-concurrency 10 \
     --revisions-mode single "${registry_args[@]}" -o none
 URL="https://$(azc containerapp show -g "$RG" -n "$APP" --query properties.configuration.ingress.fqdn -o tsv)"
