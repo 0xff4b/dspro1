@@ -146,7 +146,9 @@ Azure-Deploy beziehungsweise GitHub-Workflow als geprüft.
 - App: https://dspro1-streamlit.thankfulpond-a9641a83.switzerlandnorth.azurecontainerapps.io
 - Region: Switzerland North.
 - [GitHub-Steuerung: Azure Streamlit prototype](https://github.com/0xff4b/dspro1/actions/workflows/azure-prototype.yml)
-- Automatische Deployments für relevante Änderungen auf `main` sind eingeschaltet.
+- Stand 21.09.2026: App gestoppt (alle Revisionen inaktiv); `AZURE_AUTO_DEPLOY=false`.
+- Für den nächsten Event im Workflow **deploy** wählen: baut und startet den neuesten Designstand. **start** startet nur das zuletzt bereits veröffentlichte Image.
+- Nach der Demo **stop** wählen. Die Automatik bleibt ausgeschaltet, bis `AZURE_AUTO_DEPLOY` ausdrücklich wieder auf `true` gesetzt wird.
 - Erfolgreicher automatischer Lauf mit 0.25 vCPU / 0.5 GiB:
   https://github.com/0xff4b/dspro1/actions/runs/35548950229
 - Für den initialen privaten Registry-Zugriff wurde der autorisierte

@@ -15,7 +15,10 @@ RUN apt-get update \
     && useradd --create-home --uid 10001 app
 COPY requirements-app.txt .
 RUN pip install -r requirements-app.txt
+COPY --chown=app:app .streamlit/config.toml .streamlit/config.toml
+COPY --chown=app:app src/assets/ src/assets/
 COPY --chown=app:app src/app.py src/app.py
+COPY --chown=app:app src/plot_style.py src/plot_style.py
 COPY --chown=app:app src/notebooks/models/*.joblib src/notebooks/models/
 COPY --chown=app:app src/external-sources/output_csv/model.csv src/external-sources/output_csv/model.csv
 USER app

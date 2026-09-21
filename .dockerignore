@@ -12,3 +12,10 @@
 !src/external-sources/output_csv/model.csv
 # Incomplete export: missing fitted geo transformer; cannot predict.
 src/notebooks/models/gradient_boosting_all_geo.joblib
+
+!.streamlit/
+!.streamlit/config.toml
+!src/assets/
+!src/assets/**
+
+!src/plot_style.py

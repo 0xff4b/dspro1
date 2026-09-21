@@ -24,6 +24,8 @@ ausfuehren, die App holt sich `model.csv` automatisch.
 """
 from __future__ import annotations
 
+import base64
+from html import escape
 import datetime as dt
 import math
 import re
@@ -38,6 +40,9 @@ import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
+from plot_style import apply_plot_style
+
+apply_plot_style()
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
@@ -1327,11 +1332,11 @@ def get_predictor() -> tuple[RentPredictor, str]:
 # Ab hier ist alles "nur" Frontend. Die Logik (Adresse -> Features -> Predict)
 # steckt komplett in den Pfad-/Pipeline-Funktionen weiter oben; hier wird nur
 # noch eingegeben, gerendert und angezeigt.
-APP_VERSION = "Dashboard v4.3"
+APP_VERSION = "AI Event Demo · v5.0"
 
 PRES_NAVY = "#1F2A44"
-PRES_BLUE = "#263B73"
-PRES_RED = "#FF454F"
+PRES_BLUE = "#0077C8"
+PRES_RED = "#D0384B"
 PRES_BG = "#F7F8FB"
 PRES_MUTED = "#6B7280"
 
@@ -1358,122 +1363,33 @@ MODEL_COMPARISON = pd.DataFrame([
 ])
 
 
+@st.cache_data(show_spinner=False)
+def asset_uri(name: str) -> str:
+    path = APP_DIR / "assets" / name
+    mime = {".svg": "image/svg+xml", ".png": "image/png", ".ttf": "font/ttf"}[path.suffix]
+    return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+
+
 def inject_css() -> None:
-    st.markdown(f"""
-    <style>
-    .stApp {{
-        background: linear-gradient(180deg, #ffffff 0%, {PRES_BG} 100%);
-    }}
-    .block-container {{
-        max-width: 1360px;
-        padding-top: 2.0rem;
-        padding-bottom: 3rem;
-    }}
-    div[data-testid="stSidebar"] {{
-        background: #EEF2F7;
-        border-right: 1px solid #DEE4EE;
-    }}
-    h1, h2, h3 {{
-        color: {PRES_NAVY};
-        letter-spacing: .01em;
-    }}
-    .hero {{
-        background: linear-gradient(135deg, {PRES_NAVY} 0%, {PRES_BLUE} 70%, #375AA4 100%);
-        color: white;
-        padding: 28px 32px;
-        border-radius: 26px;
-        box-shadow: 0 18px 50px rgba(31,42,68,.18);
-        margin-bottom: 20px;
-    }}
-    .hero h1 {{
-        color: white;
-        margin: 0;
-        font-size: 2.35rem;
-    }}
-    .hero p {{
-        margin: 8px 0 0 0;
-        color: rgba(255,255,255,.82);
-        font-size: 1.05rem;
-    }}
-    .version-pill {{
-        display: inline-block;
-        margin-top: 14px;
-        padding: 5px 10px;
-        border-radius: 999px;
-        background: rgba(255,255,255,.16);
-        border: 1px solid rgba(255,255,255,.30);
-        color: white;
-        font-size: .82rem;
-    }}
-    .kpi-grid {{
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 16px;
-        margin: 14px 0 18px 0;
-    }}
-    .kpi-card {{
-        background: white;
-        border: 1px solid #E6E9F0;
-        border-radius: 20px;
-        padding: 18px 20px;
-        box-shadow: 0 12px 30px rgba(31,42,68,.07);
-    }}
-    .kpi-label {{
-        color: {PRES_MUTED};
-        font-size: .84rem;
-        margin-bottom: 6px;
-    }}
-    .kpi-value {{
-        color: {PRES_NAVY};
-        font-size: 1.75rem;
-        font-weight: 760;
-        line-height: 1.12;
-    }}
-    .kpi-note {{
-        color: {PRES_MUTED};
-        font-size: .78rem;
-        margin-top: 6px;
-    }}
-    .section-card {{
-        background: white;
-        border: 1px solid #E5E7EB;
-        border-radius: 22px;
-        padding: 22px 24px;
-        box-shadow: 0 12px 32px rgba(31,42,68,.06);
-        margin: 14px 0;
-    }}
-    .success-box {{
-        background: #EAF8F0;
-        border: 1px solid #C9EFD8;
-        color: #116636;
-        border-radius: 16px;
-        padding: 14px 16px;
-        margin: 12px 0;
-        font-weight: 650;
-    }}
-    .warning-box {{
-        background: #FFF7E6;
-        border: 1px solid #FFE0A3;
-        color: #7A4E00;
-        border-radius: 16px;
-        padding: 14px 16px;
-        margin: 12px 0;
-    }}
-    div.stButton > button:first-child {{
-        background: {PRES_RED};
-        color: white;
-        border: 0;
-        border-radius: 14px;
-        padding: .65rem 1.2rem;
-        font-weight: 750;
-    }}
-    div.stButton > button:first-child:hover {{
-        background: #E73741;
-        color: white;
-        border: 0;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
+    # Match the configured widget theme; OS preference may differ from a custom theme.
+    dark = st.get_option("theme.base") == "dark"
+    palette = (
+        {"bg": "#111b27", "panel": "#192839", "text": "#f1f6fc", "muted": "#bccbde",
+         "border": "#34465e", "blue": "#70bbff", "highlight": "#183b38"}
+        if dark else
+        {"bg": "#ffffff", "panel": "#f0f8fe", "text": "#111a28", "muted": "#4c6280",
+         "border": "#d6e7f5", "blue": "#0077c8", "highlight": "#e7f5f0"}
+    )
+    variables = ";".join(f"--app-{key}:{value}" for key, value in palette.items())
+    variables += ";--logo-filter:" + ("invert(1)" if dark else "none")
+    css = (APP_DIR / "assets" / "app.css").read_text()
+    css = css.replace("__HEADING_FONT__", asset_uri("BarlowCondensed-Bold.ttf"))
+    st.html(f"<style>.stApp {{{variables}}}{css}</style>")
+
+
+def section_heading(number: str, title: str) -> None:
+    st.html(f'<div class="section-heading"><span class="section-number">{escape(number)}</span>'
+            f'<h2>{escape(title)}</h2></div>')
 
 
 def fmt_chf(v: Any, decimals: int = 0) -> str:
@@ -1491,11 +1407,11 @@ def kpi_cards(items: list[tuple[str, str, str]]) -> None:
     html = ['<div class="kpi-grid">']
     for label, value, note in items:
         html.append(
-            f'<div class="kpi-card"><div class="kpi-label">{label}</div>'
-            f'<div class="kpi-value">{value}</div><div class="kpi-note">{note}</div></div>'
+            f'<div class="kpi-card"><div class="kpi-label">{escape(str(label))}</div>'
+            f'<div class="kpi-value">{escape(str(value))}</div><div class="kpi-note">{escape(str(note))}</div></div>'
         )
     html.append("</div>")
-    st.markdown("".join(html), unsafe_allow_html=True)
+    st.html("".join(html))
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -1780,13 +1696,27 @@ def prediction_band(prediction: float, data: Optional[pd.DataFrame] = None) -> t
 
 
 def hero() -> None:
-    st.markdown(f"""
-    <div class="hero">
-        <h1>Mietpreis-Schätzer Schweiz</h1>
-        <p>Adresse → EGID/GWR → Swisstopo → Modellvergleich → transparente Kaltmiet-Schätzung</p>
-        <span class="version-pill">Version: {APP_VERSION}</span>
+    st.html(f"""
+    <div class="brand-row">
+      <img class="hslu-logo" src="{asset_uri("hslu-logo.svg")}" alt="HSLU Hochschule Luzern">
+      <div class="event-label"><strong>AI Event · Live Demo</strong>DSPRO1 · Team 8</div>
     </div>
-    """, unsafe_allow_html=True)
+    <section class="hero" aria-label="Projektübersicht">
+      <div class="hero-copy">
+        <p class="hero-kicker">Data / Machine Learning / Real Estate</p>
+        <h1>Predicting apartment<br>rental prices<br>in Switzerland</h1>
+        <p>Von der Schweizer Adresse zur datenbasierten Kaltmiete.
+        Wohnungs-, Gebäude- und Lagedaten machen den Unterschied.</p>
+        <a class="hero-cta" href="#demo-content" target="_self">Demo entdecken <span aria-hidden="true">↗</span></a>
+      </div>
+      <figure class="hero-visual">
+        <div class="visual-label">Der Schweizer Mietmarkt</div>
+        <img src="{asset_uri("geo_price_map.png")}" alt="Räumliche Verteilung der Mietpreise im Projektdatensatz">
+        <figcaption>Reale Inserate. Lokaler Kontext.<br>Visualisierung aus unserer Projektanalyse.</figcaption>
+      </figure>
+    </section>
+    <div class="topic-strip"><span>SWISS DATA</span><span>EXPLAINABLE RESULTS</span><span>REAL-WORLD IMPACT</span></div>
+    """)
 
 
 def selected_dwelling() -> Optional[dict]:
@@ -1833,43 +1763,66 @@ def fmt_dwelling(idx: int) -> str:
     return f"EWID {ew}{label_part} · {floor} · {r_str} Zi · {a_str} m²"
 
 
+@st.cache_resource
+def address_search_component():
+    from streamlit.components.v2 import component
+    assets = APP_DIR / "assets"
+    return component(
+        "official_address_search",
+        html=(assets / "address-search.html").read_text(),
+        css=(assets / "address-search.css").read_text(),
+        js=(assets / "address-search.js").read_text(),
+    )
+
+
 def address_picker() -> Optional[str]:
-    st.markdown("### 🔎 Offizielle Adresse suchen")
-    st.caption("Tippe Strasse/Hausnummer. Ort oder PLZ ist optional; der Vorschlag kommt von GeoAdmin.")
-    selected_label: Optional[str] = None
+    result = address_search_component()(
+        key="address_autocomplete",
+        data={"initial": st.session_state.get("confirmed_address") or ""},
+        default={"selected": st.session_state.get("confirmed_address")},
+        on_selected_change=lambda: None,
+    )
+    selected = result.selected or None
+    if selected != st.session_state.get("confirmed_address"):
+        st.session_state.confirmed_address = selected
+        st.session_state.lookup_egid_info = None
+        st.session_state.lookup_dwellings = []
+        st.session_state.auto_lookup_address = None
+        st.session_state.last_prediction = None
+    return selected
 
-    try:
-        from streamlit_searchbox import st_searchbox  # type: ignore
 
-        def search(term: str) -> list[str]:
-            return [x["label"] for x in geoadmin_address_suggestions(term, limit=10)]
-
-        selected_label = st_searchbox(
-            search,
-            key="live_address_search",
-            placeholder="z. B. Kirchhaldenstrasse 36b oder Kronenbergstrasse 5",
-            label="Adresse suchen",
-            clear_on_submit=False,
-        )
-        if selected_label:
-            st.session_state.selected_address_label = selected_label
-
-    except Exception:
-        query = st.text_input(
-            "Adresse suchen",
-            value=st.session_state.get("address_query", ""),
-            placeholder="z. B. Kirchhaldenstrasse 36b oder Kronenbergstrasse 5",
-            key="address_query",
-        )
-        suggestions = geoadmin_address_suggestions(query, limit=10)
-        if suggestions:
-            labels = [s["label"] for s in suggestions]
-            selected_label = st.selectbox("Offizielle Adresse auswählen", labels, key="address_suggestion_select")
-            st.session_state.selected_address_label = selected_label
-        elif len(normalize_address(query)) >= 3:
-            st.info("Noch kein offizieller Vorschlag gefunden. Ergänze Ort oder Hausnummer, falls nötig.")
-
-    return selected_label or st.session_state.get("selected_address_label")
+def render_example_prediction(model_obj: Any, model_meta: Dict[str, Any]) -> None:
+    st.caption("Sofort ausprobieren: Beispielwerte ohne externe Adressabfrage. Keine konkrete ausgeschriebene Wohnung.")
+    locations = {
+        "Zürich": (2683000, 1247000, 408),
+        "Luzern": (2666000, 1211000, 435),
+        "Bern": (2600000, 1200000, 540),
+        "Basel": (2611000, 1267000, 270),
+    }
+    with st.form("example_apartment"):
+        city = st.selectbox("Standort", list(locations), key="demo_city")
+        c1, c2 = st.columns(2)
+        area = c1.number_input("Wohnfläche (m²)", min_value=10, max_value=500, value=75, step=5, key="demo_area")
+        rooms = c2.number_input("Zimmer", min_value=0.5, max_value=15.0, value=3.0, step=0.5, key="demo_rooms")
+        st.form_submit_button("Miete schätzen", type="primary", width="stretch")
+    east, north, elevation = locations[city]
+    features = pd.DataFrame([{
+        "east": east, "north": north, "elevation": elevation,
+        "area": area, "rooms": rooms, "year_built": 1990,
+        "apartments": 8, "land_area": 300, "population": 100, "oev": 4000, "solar": 3,
+    }])
+    estimate = float(safe_predict(model_obj, features)[0])
+    rmse = float(model_meta.get("rmse_eval") or PROJECT_METRICS["rmse"])
+    kpi_cards([
+        ("Geschätzte Kaltmiete", fmt_chf(estimate), "pro Monat · ohne Nebenkosten"),
+        ("Miete pro Fläche", f"{estimate / area:.0f} CHF/m²", f"{area} m² · {rooms:g} Zimmer · {city}"),
+        ("Modellfehler (RMSE)", fmt_chf(rmse), "Evaluationswert, kein individuelles Konfidenzintervall"),
+    ])
+    with st.expander("Welche Beispielwerte verwendet das Modell?"):
+        st.write("Baujahr 1990 · 8 Wohnungen im Gebäude · Grundstück 300 m². "
+                 "Die Lagewerte sind feste Demonstrationswerte. Für eine konkrete Adresse zur Adresssuche wechseln.")
+        st.dataframe(features, hide_index=True, width="stretch")
 
 
 def run_address_lookup(selected_label: str) -> None:
@@ -1911,20 +1864,23 @@ def run_address_lookup(selected_label: str) -> None:
 
 
 def render_prediction_page(model_obj: Any, model_meta: Dict[str, Any]) -> None:
-    st.markdown("## Schätzung")
-    st.markdown("Adresse auswählen, Wohnung wählen, Werte prüfen und Kaltmiete schätzen.")
+    section_heading("01", "Was kostet diese Wohnung?")
+    mode = st.radio("Eingabe wählen", ["Adresse suchen", "Beispielwohnung"], horizontal=True, key="input_mode", label_visibility="collapsed")
+    if mode == "Beispielwohnung":
+        render_example_prediction(model_obj, model_meta)
+        return
 
     selected_label = address_picker()
     c1, c2 = st.columns([4, 1])
     with c1:
         if selected_label:
             st.markdown(
-                f"<div class='success-box'>Ausgewählt: <b>{selected_label}</b><br>"
+                f"<div class='success-box'>Ausgewählt: <b>{escape(selected_label)}</b><br>"
                 "Gebäude- und Wohnungsdaten werden automatisch geladen.</div>",
                 unsafe_allow_html=True,
             )
         else:
-            st.markdown("<div class='warning-box'>Wähle zuerst eine offizielle GeoAdmin-Adresse aus dem Dropdown.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='warning-box'>Adresse eintippen und einen offiziellen Vorschlag bestätigen.</div>", unsafe_allow_html=True)
     with c2:
         reload_clicked = st.button("🔄 Daten neu laden", type="primary", disabled=not bool(selected_label), width="stretch")
 
@@ -1979,7 +1935,7 @@ def render_prediction_page(model_obj: Any, model_meta: Dict[str, Any]) -> None:
     # Automatische Live-Schätzung: Jede Änderung an Wohnung, Fläche, Zimmer,
     # Stockwerk oder Modell triggert einen Streamlit-Rerun und damit eine neue
     # Schätzung. Kein separater "Analysieren"-Klick nötig.
-    st.markdown("### ⚡ Live-Schätzung")
+    section_heading("02", "Die Mietpreis-Schätzung")
     try:
         selected_dw = selected_dwelling() or {}
 
@@ -2116,7 +2072,7 @@ def plot_actual_vs_predicted(df_pred: pd.DataFrame, last: Optional[dict]) -> Non
 
 
 def render_performance_page(model_obj: Any, model_meta: Dict[str, Any]) -> None:
-    st.markdown("## Model Performance")
+    section_heading("02", "Wie gut ist das Modell?")
     last = st.session_state.get("last_prediction")
     rmse = float(model_meta.get("rmse_eval") or PROJECT_METRICS["rmse"])
     r2 = model_meta.get("r2_eval", PROJECT_METRICS["r2"])
@@ -2130,7 +2086,7 @@ def render_performance_page(model_obj: Any, model_meta: Dict[str, Any]) -> None:
         ])
     else:
         kpi_cards([
-            ("Bestes Projektmodell", "LightGBM + KNN", "aus finaler Evaluation"),
+            ("Aktives Modell", str(model_meta.get("kind", "Modell")), "Evaluation des gewählten Artefakts"),
             ("RMSE", fmt_chf(rmse), "niedriger ist besser"),
             ("R²", f"{float(r2):.3f}" if r2 is not None else "—", "höher ist besser"),
             ("Baseline RMSE", fmt_chf(PROJECT_METRICS["baseline_rmse"]), "Mean-Prediction"),
@@ -2175,43 +2131,41 @@ def render_performance_page(model_obj: Any, model_meta: Dict[str, Any]) -> None:
 
 
 def render_model_data_page(model_meta: Dict[str, Any], model_options: list[Dict[str, Any]]) -> None:
-    st.markdown("## Modell & Daten")
+    section_heading("03", "Von den Daten zum Modell")
+    st.html("""
+    <div class="process-grid">
+      <div class="process-card"><strong>01 / Inserate</strong><p>Schweizer Mietinserate liefern Wohnfläche, Zimmer und die ausgeschriebene Kaltmiete.</p></div>
+      <div class="process-card"><strong>02 / Kontext</strong><p>GWR, GeoAdmin und swisstopo ergänzen Gebäude-, Standort- und Erschliessungsdaten.</p></div>
+      <div class="process-card"><strong>03 / Schätzung</strong><p>Trainierte Regressionsmodelle kombinieren diese Merkmale zu einer Mietpreis-Schätzung.</p></div>
+    </div>
+    """)
     kpi_cards([
-        ("Aktives Modell", str(model_meta.get("label", "—")), str(model_meta.get("kind", ""))),
-        ("Quelle", str(model_meta.get("source", "—")), str(model_meta.get("path", ""))[:80]),
-        ("Datenpfad", "model.csv", str(DATA_PATH)),
-        ("Version", APP_VERSION, "sichtbarer Script-Check"),
+        ("Datengrundlage", f"{len(load_data()):,}".replace(",", "'"), "Zeilen im mitgelieferten Modelldatensatz"),
+        ("Modellvarianten", str(len(model_options)), "im Prototyp verfügbar"),
+        ("Projekt", "DSPRO1", "Hochschule Luzern · Team 8"),
     ])
-
-    st.markdown("### Gefundene Modell-Artefakte")
-    rows = [{"Label": opt["label"], "Pfad": str(opt.get("path") or "Default Auto-Cache"), "Default": bool(opt.get("is_default"))} for opt in model_options]
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
-
-    st.markdown("### Modell-Metadaten")
-    st.json({k: v for k, v in model_meta.items() if k not in ("features",)})
-    if model_meta.get("features"):
-        st.write(model_meta.get("features"))
-
-    with st.expander("Datenvorschau `model.csv`"):
-        try:
-            df = load_data()
-            st.dataframe(df.head(25), width="stretch")
-            st.write(f"Zeilen: {len(df):,} · Spalten: {len(df.columns):,}".replace(",", "'"))
-        except Exception as exc:
-            st.error(f"Daten konnten nicht geladen werden: {exc}")
+    st.image(str(APP_DIR / "assets" / "feature_importance_heatmap.png"),
+             caption="Welche Merkmale tragen zur Schätzung bei? Modellvergleich aus der Projektanalyse.",
+             width="stretch")
+    st.info("Eine Schätzung ersetzt keine Bewertung vor Ort. Zustand, Aussicht und Innenausstattung "
+            "sind nicht vollständig erfasst. Hochpreisige Wohnungen sind schwieriger vorherzusagen.")
+    with st.expander("Datengrundlage ansehen"):
+        st.dataframe(load_data().head(25), width="stretch", hide_index=True)
+    with st.expander("Modell-Metadaten"):
+        st.json({k: v for k, v in model_meta.items() if k not in ("path", "source")})
 
 
 def render_manual_sidebar_prediction(model_obj: Any) -> None:
-    st.sidebar.header("🏢 Manuelle Schätzung")
-    area = st.sidebar.slider("Wohnfläche (m²)", 20, 250, 75)
-    rooms = st.sidebar.slider("Zimmer", 1, 8, 3)
-    year_built = st.sidebar.slider("Baujahr", 1900, 2026, 1990)
+    st.header("🏢 Manuelle Schätzung")
+    area = st.slider("Wohnfläche (m²)", 20, 250, 75)
+    rooms = st.slider("Zimmer", 1, 8, 3)
+    year_built = st.slider("Baujahr", 1900, 2026, 1990)
 
-    st.sidebar.header("🏗️ Gebäude")
-    apartments = st.sidebar.slider("Wohnungen im Gebäude", 1, 100, 8)
-    land_area = st.sidebar.slider("Grundstücksfläche (m²)", 50, 2000, 300)
+    st.header("🏗️ Gebäude")
+    apartments = st.slider("Wohnungen im Gebäude", 1, 100, 8)
+    land_area = st.slider("Grundstücksfläche (m²)", 50, 2000, 300)
 
-    st.sidebar.header("📍 Lage")
+    st.header("📍 Lage")
     presets = {
         "Zürich (HB)": (2683000, 1247000, 408),
         "Bern (HB)": (2600000, 1200000, 540),
@@ -2222,16 +2176,16 @@ def render_manual_sidebar_prediction(model_obj: Any) -> None:
         "Zermatt": (2624500, 1097000, 1620),
         "Custom": None,
     }
-    preset = st.sidebar.selectbox("Stadt-Preset", list(presets.keys()))
+    preset = st.selectbox("Stadt-Preset", list(presets.keys()))
     east_d, north_d, elev_d = presets[preset] or (2683000, 1247000, 408)
-    east = st.sidebar.number_input("LV95 East", value=east_d, step=1000)
-    north = st.sidebar.number_input("LV95 North", value=north_d, step=1000)
-    elevation = st.sidebar.number_input("Höhe (m ü. M.)", value=elev_d, step=10)
+    east = st.number_input("LV95 East", value=east_d, step=1000)
+    north = st.number_input("LV95 North", value=north_d, step=1000)
+    elevation = st.number_input("Höhe (m ü. M.)", value=elev_d, step=10)
 
-    st.sidebar.header("🌍 Lagedaten")
-    population = st.sidebar.slider("Bevölkerung Hektar", 1, 600, 100)
-    oev = st.sidebar.slider("ÖV-Erschliessung (Score)", 0, 100000, 4000)
-    solar = st.sidebar.slider("Solar-Klasse (1=schlecht, 5=top)", 1, 5, 3)
+    st.header("🌍 Lagedaten")
+    population = st.slider("Bevölkerung Hektar", 1, 600, 100)
+    oev = st.slider("ÖV-Erschliessung (Score)", 0, 100000, 4000)
+    solar = st.slider("Solar-Klasse (1=schlecht, 5=top)", 1, 5, 3)
 
     input_df = pd.DataFrame([{
         "east": east, "north": north, "elevation": elevation, "area": area,
@@ -2241,9 +2195,9 @@ def render_manual_sidebar_prediction(model_obj: Any) -> None:
 
     try:
         pred = float(safe_predict(model_obj, input_df)[0])
-        st.sidebar.metric("Manuelle Kaltmiete", fmt_chf(pred), f"{pred / area:.0f} CHF/m²")
+        st.metric("Manuelle Kaltmiete", fmt_chf(pred), f"{pred / area:.0f} CHF/m²")
     except Exception as exc:
-        st.sidebar.warning(f"Manuelle Schätzung nicht verfügbar: {type(exc).__name__}")
+        st.warning(f"Manuelle Schätzung nicht verfügbar: {type(exc).__name__}")
 
 
 # ---- App Start ----
@@ -2251,6 +2205,7 @@ st.set_page_config(
     page_title="Mietpreis-Schätzer Schweiz",
     page_icon="🏠",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 inject_css()
@@ -2285,23 +2240,32 @@ except Exception as e:
     st.error(f"Modell konnte nicht geladen werden: {type(e).__name__}: {e}")
     st.stop()
 
-st.sidebar.success(f"Modell aktiv: {model_meta.get('label')} · {model_meta.get('kind', 'Model')}")
-st.sidebar.caption(f"{APP_VERSION} · Script OK")
+st.sidebar.success(f"Modell aktiv: {model_meta.get('kind', 'Modell')}")
+st.sidebar.caption(APP_VERSION)
 st.sidebar.divider()
 
-render_manual_sidebar_prediction(predictor)
+with st.sidebar.expander("Manuelle Modell-Eingaben", expanded=False):
+    render_manual_sidebar_prediction(predictor)
 
+st.html('<div id="demo-content" class="demo-anchor"></div>')
 page = st.radio(
     "Navigation",
-    ["Schätzung", "Model Performance", "Modell & Daten"],
+    ["Live-Demo", "Modellgüte", "Projekt & Daten"],
     horizontal=True,
     label_visibility="collapsed",
     key="top_navigation",
 )
 
-if page == "Schätzung":
+if page == "Live-Demo":
     render_prediction_page(predictor, model_meta)
-elif page == "Model Performance":
+elif page == "Modellgüte":
     render_performance_page(predictor, model_meta)
 else:
     render_model_data_page(model_meta, model_options)
+
+st.html("""
+<footer class="demo-footer">
+  <div><strong>ACCURACY IS NOT EVERYTHING.</strong><p>Eine gute Schätzung braucht Daten, Kontext und transparente Grenzen.</p></div>
+  <div class="credits">Elias Martinelli · Timo Schlumpf<br>HSLU · DSPRO1 · Team 8</div>
+</footer>
+""")

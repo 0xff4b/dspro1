@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - src/app.py
+      - src/plot_style.py
+      - src/assets/**
+      - .streamlit/config.toml
       - src/notebooks/models/**
       - src/external-sources/output_csv/model.csv
       - Dockerfile
