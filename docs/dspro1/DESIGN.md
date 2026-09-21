@@ -29,3 +29,7 @@ Vorschau: http://127.0.0.1:18501
 `scripts/smoke_app.py` prüft im Container alle ausgelieferten Modelle und Seiten. `scripts/check_browser_ui.cjs` prüft eine laufende Vorschau mit Playwright in installiertem Chrome, Edge sowie Android- und iPhone-Emulation. Benötigt Playwright und dessen WebKit-Browser; `NODE_PATH` und `PLAYWRIGHT_BROWSERS_PATH` können auf vorhandene Installationen zeigen. Für die Live-Adressprüfung `TEST_ADDRESS` auf eine vollständige Schweizer Adresse setzen; die externen GeoAdmin-Dienste müssen erreichbar sein. Mobilprüfungen ersetzen keinen Test auf physischen Geräten.
 
 Azure bleibt während der Designarbeit ausgeschaltet. Zum nächsten Start mit diesem Design siehe [AZURE.md](AZURE.md): im GitHub-Workflow `deploy` wählen.
+
+## Abbildungsexport
+
+Das Notebook schreibt weiterhin PNGs nach docs/dspro1/final-report/fig/ und zusätzlich SVGs nach docs/dspro1/fig/poster-ai-event/. Siehe [Exportanleitung](fig/poster-ai-event/README.md).

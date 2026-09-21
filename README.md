@@ -46,16 +46,18 @@ dspro1/
 ├── Makefile                        <- Häufige Workflows: make report / app / notebook-fix
 ├── requirements.txt                <- Python-Abhängigkeiten
 ├── .gitignore
-├── docs/                           <- Berichte, Präsentationen, AI Canvas, Data Sheet
-│   ├── ai-canvas/
-│   ├── data-sheet/
-│   ├── final-report/               <- LaTeX-Source + fig/ + kompiliertes PDF
-│   │   ├── *.tex / *.bib
-│   │   └── fig/                    <- PNGs vom Notebook-Export (Kap. 21)
-│   ├── presentation-final/
-│   ├── presentation-mid-term/
-│   ├── project-proposal/
-│   └── schemes/                    <- drawio Architektur-Diagramme
+├── docs/
+│   ├── dspro1/                     <- sämtliche bisherige Dokumentation
+│   │   ├── __templates/
+│   │   ├── ai-canvas/
+│   │   ├── data-sheet/
+│   │   ├── final-report/           <- LaTeX, PDF und PNG-Abbildungen in fig/
+│   │   ├── fig/poster-ai-event/    <- zusätzliche SVG-Exporte fürs Poster
+│   │   ├── presentation-final/
+│   │   ├── presentation-mid-term/
+│   │   ├── project-proposal/
+│   │   └── schemes/                <- drawio Architektur-Diagramme
+│   └── dspro2/                     <- vorbereitet für neue Arbeiten
 ├── src/
 │   ├── app.py                      <- Streamlit Demo-App
 │   ├── notebooks/
@@ -94,7 +96,7 @@ dspro1/
 | 18    | Geo-Analyse: EDA, KMeans- und DBSCAN-Clustering, Group-Split-Robustheits-Check |
 | 19    | Iterative Verbesserungen: Tuning (RandomizedSearchCV + Halving), Stacking, Bootstrap-CIs, KNN-Distance-Features (entscheidender Hebel: 399 → 393 CHF), Conformal Prediction (MAPIE), Drift-Check, Bias-Analyse, Modell-Karte, regularisiertes LGBM auf reduzierten Feature-Sets, Wide-Pipeline |
 | 20    | End-to-End `RentPredictor`-Klasse, 60/20/20-Split, Hold-Out-Test (bis zum Schluss unangetastet), Data-Sheet |
-| 21    | Export aller Figures für den Final Report (`docs/final-report/fig/`) |
+| 21    | Export aller Figures für den Final Report (`docs/dspro1/final-report/fig/`) |
 
 Die Backup-Datei `model_v3_clean.backup.ipynb` enthält den ungestrafften Pre-Cleanup-Stand mit allen Experimenten (Log-Target, Imputation, RFECV usw.), die im finalen Notebook nicht mehr drin sind.
 
@@ -113,7 +115,7 @@ Aufbereitetes Trainings-Set: `src/external-sources/output_csv/model.csv` (~4'500
 - `requirements.txt` mit Versions-Pins
 - `models/rent_predictor_v3.joblib` enthält die finale Pipeline + Metadata (`training_date`, `python_version`, `test_metrics`)
 - `models/lgbm_wide_4feat.joblib` für die Wide-Pipeline-Fallback-Variante
-- Modell-Karte und Datasheet im Notebook (Kap. 19 / 20) sowie in `docs/data-sheet/`
+- Modell-Karte und Datasheet im Notebook (Kap. 19 / 20) sowie in `docs/dspro1/data-sheet/`
 
 ## Wartungs-Scripts
 
@@ -134,4 +136,6 @@ make notebook-fix     # python fix_summary_blocks.py — Post-Cleanup-Regression
 
 ## Azure-Prototyp mit Docker
 
-Bereitstellung, automatischer GitHub-Upload sowie Start/Stopp/Löschen: [Azure-Anleitung](docs/AZURE.md).
+Bereitstellung, automatischer GitHub-Upload sowie Start/Stopp/Löschen: [Azure-Anleitung](docs/dspro1/AZURE.md).
+
+Poster-Abbildungen werden zusätzlich als SVG nach docs/dspro1/fig/poster-ai-event/ exportiert. Details: [Abbildungsexport](docs/dspro1/fig/poster-ai-event/README.md).

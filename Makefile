@@ -15,8 +15,8 @@
 # ---------------------------------------------------------------------------
 
 # ---- Konfiguration --------------------------------------------------------
-REPORT_DIR   := docs/final-report
-REPORT_NAME  := DISPRO1_FinalReport_Team8_PredictingApartmentRentalPrices_DRAFT
+REPORT_DIR   := docs/dspro1/final-report
+REPORT_NAME  := DISPRO1_FinalReport_Team8_PredictingApartmentRentalPrices
 REPORT_TEX   := $(REPORT_NAME).tex
 REPORT_PDF   := $(REPORT_NAME).pdf
 
