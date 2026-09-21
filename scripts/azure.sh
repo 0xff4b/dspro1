@@ -19,7 +19,7 @@ owned_group() {
 }
 status() {
     azc containerapp show -g "$RG" -n "$APP" \
-        --query '{url:properties.configuration.ingress.fqdn,state:properties.provisioningState,min:properties.template.scale.minReplicas,max:properties.template.scale.maxReplicas}' -o table
+        --query '{url:properties.configuration.ingress.fqdn,state:properties.provisioningState,cpu:properties.template.containers[0].resources.cpu,memory:properties.template.containers[0].resources.memory,min:properties.template.scale.minReplicas,max:properties.template.scale.maxReplicas}' -o table
     azc containerapp revision list -g "$RG" -n "$APP" \
         --query '[].{revision:name,active:properties.active,health:properties.healthState}' -o table
 }

@@ -140,3 +140,28 @@ Azure liest ACR-Images mit Managed Identity; der Registry-Adminzugang bleibt aus
 Nach jedem Deploy prüft das Skript den Streamlit-Health-Endpunkt und zeigt die URL.
 Cloud-Bereitstellung und automatische Uploads gelten erst nach einem erfolgreichen
 Azure-Deploy beziehungsweise GitHub-Workflow als geprüft.
+
+## Aktuelle Bereitstellung
+
+- App: https://dspro1-streamlit.thankfulpond-a9641a83.switzerlandnorth.azurecontainerapps.io
+- Region: Switzerland North.
+- [GitHub-Steuerung: Azure Streamlit prototype](https://github.com/0xff4b/dspro1/actions/workflows/azure-prototype.yml)
+- Automatische Deployments für relevante Änderungen auf `main` sind eingeschaltet.
+- Erfolgreicher automatischer Lauf mit 0.25 vCPU / 0.5 GiB:
+  https://github.com/0xff4b/dspro1/actions/runs/35548950229
+- Für den initialen privaten Registry-Zugriff wurde der autorisierte
+  GitHub-CLI-Token als Actions-Secret hinterlegt. Er kann durch einen dedizierten
+  classic PAT mit ausschließlich `read:packages` und Paket-Zugriff ersetzt werden.
+
+Live-Prüfung der HTTPS-Seite, der WebSocket-Verbindung und einer tatsächlich
+gerenderten Modellvorhersage:
+
+```bash
+docker run --rm \
+  -v "$PWD/scripts/check_deployment.py:/tmp/check_deployment.py:ro" \
+  dspro1-streamlit:prototype python /tmp/check_deployment.py \
+  https://dspro1-streamlit.thankfulpond-a9641a83.switzerlandnorth.azurecontainerapps.io
+```
+
+Die Löschfunktion ist durch Tests mit einer simulierten Azure CLI abgesichert;
+die bereitgestellte App wird zur Prüfung nicht gelöscht.
