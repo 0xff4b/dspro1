@@ -1,3 +1,6 @@
+# Full app + notebook environment; install via setup.py and the generated lock.
+-r requirements-app.txt
+
 # === Core Data / ML ===
 pandas>=2.0,<3.0
 numpy>=1.24,<2.2
@@ -32,3 +35,8 @@ streamlit>=1.28,<2.0
 # === Notebook ===
 jupyter>=1.0
 ipykernel>=6.25
+
+# Database/enrichment notebooks
+SQLAlchemy>=2.0,<3.0
+psycopg2-binary>=2.9,<3.0
+tqdm>=4.66,<5.0

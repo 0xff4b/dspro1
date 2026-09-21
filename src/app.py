@@ -1534,11 +1534,9 @@ class GenericJoblibModel:
 
 def model_search_dirs() -> list[Path]:
     return list(dict.fromkeys([
+        APP_DIR / "notebooks" / "models",
         PROJECT_ROOT / "models",
         APP_DIR / "models",
-        APP_DIR / "notebooks" / "models",
-        PROJECT_ROOT / "src" / "notebooks" / "models",
-        Path("/home/sa_linux/code/Elias-Martinelli/dspro1/src/notebooks/models"),
     ]))
 
 
@@ -1557,6 +1555,8 @@ def discover_model_options() -> list[Dict[str, Any]]:
 
     hidden_filenames = {
         "rent_predictor_streamlit.joblib",
+        # Incomplete notebook export: its fitted geo transformer is missing.
+        "gradient_boosting_all_geo.joblib",
     }
 
     priority = {
@@ -1577,9 +1577,10 @@ def discover_model_options() -> list[Dict[str, Any]]:
                 continue
 
             rp = str(path.resolve())
-            if rp in seen:
+            # Prefer shipped artifacts over stale local copies with the same name.
+            if path.name in seen:
                 continue
-            seen.add(rp)
+            seen.add(path.name)
 
             name = path.name
             label = name

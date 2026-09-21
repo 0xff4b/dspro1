@@ -8,7 +8,7 @@
 #
 #   make help            kurze Liste aller Targets
 #   make report          baut das Final-Report-PDF (pdflatex + bibtex + 2x pdflatex)
-#   make app             startet die Streamlit-Demo-App (mit cache clear = effektiv restart)
+#   make app             startet die Streamlit-Demo-App (mit Projektumgebung)
 #
 # Konvention: alle Targets gehen davon aus, dass `make` aus dem Repo-Root
 # gestartet wird (also aus dem Ordner, in dem dieses Makefile liegt).
@@ -20,19 +20,22 @@ REPORT_NAME  := DISPRO1_FinalReport_Team8_PredictingApartmentRentalPrices
 REPORT_TEX   := $(REPORT_NAME).tex
 REPORT_PDF   := $(REPORT_NAME).pdf
 
-APP          := src/app.py
+PYTHON       ?= python3.12
 
 PDFLATEX     := pdflatex -interaction=nonstopmode -halt-on-error
 BIBTEX       := bibtex
 
 # .PHONY: keine dieser Targets erzeugt eine gleichnamige Datei.
-.PHONY: help report app
+.PHONY: help report setup app notebook doctor
 
 # ---- help (default) -------------------------------------------------------
 help:
 	@echo "Verfügbare Targets:"
 	@echo "  make report    Final-Report-PDF bauen (pdflatex + bibtex + 2x pdflatex)"
-	@echo "  make app       Streamlit-Demo starten / restarten (mit cache clear)"
+	@echo "  make app       Umgebung vorbereiten und Streamlit starten"
+	@echo "  make setup     Vollstaendige Python-Umgebung vorbereiten"
+	@echo "  make notebook  Umgebung vorbereiten und JupyterLab starten"
+	@echo "  make doctor    Installation ohne Aenderungen pruefen"
 .DEFAULT_GOAL := help
 
 # ---- Final-Report ---------------------------------------------------------
@@ -47,10 +50,15 @@ report:
 	@echo
 	@echo "PDF gebaut: $(REPORT_DIR)/$(REPORT_PDF)"
 
-# ---- Streamlit-App --------------------------------------------------------
-# `streamlit cache clear` vorweg, damit nach einem Modell-Retrain die App
-# garantiert mit dem neuen Joblib-Stand startet und nicht aus dem Cache lebt
-# — effektiv ein Restart.
+# ---- Lokale Umgebung und Anwendungen --------------------------------------
+setup:
+	$(PYTHON) setup.py
+
 app:
-	streamlit cache clear
-	streamlit run $(APP)
+	$(PYTHON) setup.py --profile app --start app
+
+notebook:
+	$(PYTHON) setup.py --start notebook
+
+doctor:
+	$(PYTHON) setup.py --doctor

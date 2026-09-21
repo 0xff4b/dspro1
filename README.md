@@ -12,39 +12,50 @@ Wir trainieren mehrere Regressions-Modelle (Ridge, RandomForest, GradientBoostin
 
 Demo: `make app` (oder `streamlit run src/app.py`) öffnet ein interaktives Frontend, in dem man Wohnungs-Parameter eingibt und sofort eine Preis-Schätzung bekommt.
 
-## Quick Start
+## Quick Start: klonen und starten
 
-```bash
-# 1. Repository klonen
-git clone <repo-url>
-cd dspro1
+Voraussetzungen: **Git und Python 3.12 (64 Bit)**. Die erste Installation braucht Internet und mehrere Minuten. Das Setup richtet App, JupyterLab, ML-Pakete und den Notebook-Kernel automatisch in der lokalen .venv ein und prüft die mitgelieferten Modelle.
 
-# 2. (Empfohlen) Virtuelles Environment
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+**Windows (PowerShell):**
 
-# 3. Abhängigkeiten installieren
-pip install -r requirements.txt
+~~~powershell
+git clone https://github.com/0xff4b/dspro1.git
+py -3.12 dspro1/setup.py --start notebook
+~~~
 
-# 4. Notebook öffnen (volle Pipeline + Analyse, 21 Kapitel)
-jupyter lab src/notebooks/model_v3_clean.ipynb
+**Linux / WSL / macOS:**
 
-# 5. Demo-App starten (interaktive Vorhersage im Browser)
-make app                       # oder: streamlit run src/app.py
+~~~bash
+git clone https://github.com/0xff4b/dspro1.git
+python3.12 dspro1/setup.py --start notebook
+~~~
 
-# 6. Final-Report-PDF bauen (pdflatex + bibtex + 2x pdflatex)
-make report
-```
+Auf macOS wird zusätzlich die OpenMP-Laufzeit benötigt: **brew install libomp**. Auf minimalen Linux-Systemen muss **libgomp1** installiert sein. Im Notebook den Kernel **DSPRO (.venv, Python 3.12)** auswählen.
 
-`make help` listet alle verfügbaren Targets.
+Für die **Streamlit-Demo** im zweiten Befehl **--start notebook** durch **--start app** ersetzen. Mit **--profile app --start app** werden nur die App-Abhängigkeiten installiert. Ohne **--start** wird nur die Umgebung vorbereitet. Eine manuelle Aktivierung ist nicht nötig.
+
+**App mit Docker**, ohne lokale Python-Installation (Git und laufendes Docker mit Compose vorausgesetzt):
+
+~~~bash
+git clone https://github.com/0xff4b/dspro1.git
+docker compose -f dspro1/compose.yaml up --build
+~~~
+
+Die App läuft unter http://localhost:8501. Stoppen mit Ctrl+C, Container entfernen mit **docker compose -f dspro1/compose.yaml down**. Diese Befehle starten keine Azure-Ressourcen.
+
+Eine kompatible bestehende .venv wird weiterverwendet. Eine defekte oder inkompatible Umgebung wird vor dem Neubau umbenannt und gesichert. Aktive Umgebungen ausserhalb des Projekts und eine vorhandene .python-version werden nicht geändert.
+
+**Probleme nach einem Pull?** Im Projektordner zuerst **python3.12 setup.py --doctor** ausführen (Windows: **py -3.12 setup.py --doctor**). Fehlende oder beschädigte Projektdateien lassen sich mit **--repair** aus dem lokalen Git-Stand wiederherstellen; vorhandene Inhalte werden vorher gesichert. Bewusst neu trainierte Modelle lassen sich mit **--allow-local-data** prüfen und verwenden.
+
+Details zu Update, Reparatur, Backups, Abhängigkeiten und optionalen Datenbank-/Scraper-Schritten: [Setup-Anleitung](docs/dspro1/SETUP.md). **make help** zeigt die Kurzbefehle unter Linux/macOS.
 
 ## Projektstruktur
 
 ```
 dspro1/
 ├── README.md                       <- du bist hier
-├── Makefile                        <- Häufige Workflows: make report / app / notebook-fix
-├── requirements.txt                <- Python-Abhängigkeiten
+├── Makefile                        <- Häufige Workflows: make setup / report / app / notebook / doctor
+├── requirements.txt                <- Eingabe für die vollständige Paketliste
 ├── .gitignore
 ├── docs/
 │   ├── dspro1/                     <- sämtliche bisherige Dokumentation
@@ -112,19 +123,16 @@ Aufbereitetes Trainings-Set: `src/external-sources/output_csv/model.csv` (~4'500
 
 - `RANDOM_STATE = 42` durchgängig in Notebook und App
 - `REFERENCE_YEAR = 2026` für `building_age`-Berechnung
-- `requirements.txt` mit Versions-Pins
+- requirements-full.lock und requirements-app.lock mit exakten Versionen und SHA-256-Prüfsummen
 - `models/rent_predictor_v3.joblib` enthält die finale Pipeline + Metadata (`training_date`, `python_version`, `test_metrics`)
 - `models/lgbm_wide_4feat.joblib` für die Wide-Pipeline-Fallback-Variante
 - Modell-Karte und Datasheet im Notebook (Kap. 19 / 20) sowie in `docs/dspro1/data-sheet/`
 
-## Wartungs-Scripts
+## Wartung
 
-Das Notebook wurde mit `humanize_notebook.py` aus einem deutlich grösseren Explorations-Notebook auf das aktuelle Format eingedampft. Wenn nach einem Cleanup ein `NameError` aus einer entfernten Kapitelzelle hochkommt (z.B. `summary_blocks`, `FEATURES_MINIMAL`, …), wendet `fix_summary_blocks.py` defensive Patches an. Beide Scripts sind idempotent.
+Das Setup verändert keine Notebook-Zellen und startet kein Training. Historische Skripte zur Notebook-Bereinigung liegen weiterhin unter src/notebooks/; sie gehören nicht zum normalen Setup.
 
-```bash
-make notebook-clean   # python humanize_notebook.py — vollständiger Cleanup-Lauf
-make notebook-fix     # python fix_summary_blocks.py — Post-Cleanup-Regression-Fixes
-```
+Paketänderungen werden in requirements.txt bzw. requirements-app.txt gepflegt und anschliessend in beide Lockdateien übernommen. GitHub Actions prüft den frischen Checkout, die vollständige Installation, Modellvorhersagen und die Wiederverwendung der Umgebung unter Windows, Linux und macOS. Die [Setup-Anleitung](docs/dspro1/SETUP.md) beschreibt die Pflege und Fehlerbehebung.
 
 ## Team und Lizenz
 

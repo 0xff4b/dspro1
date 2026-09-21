@@ -13,8 +13,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 app
-COPY requirements-app.txt .
-RUN pip install -r requirements-app.txt
+COPY requirements-app.lock .
+RUN pip install --require-hashes --only-binary=:all: -r requirements-app.lock
 COPY --chown=app:app .streamlit/config.toml .streamlit/config.toml
 COPY --chown=app:app src/assets/ src/assets/
 COPY --chown=app:app src/app.py src/app.py

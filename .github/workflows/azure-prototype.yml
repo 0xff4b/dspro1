@@ -11,6 +11,7 @@ on:
       - src/external-sources/output_csv/model.csv
       - Dockerfile
       - requirements-app.txt
+      - requirements-app.lock
       - scripts/**
       - .dockerignore
       - .github/workflows/azure-prototype.yml

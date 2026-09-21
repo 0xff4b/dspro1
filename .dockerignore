@@ -2,6 +2,7 @@
 **
 !Dockerfile
 !requirements-app.txt
+!requirements-app.lock
 !src/
 !src/app.py
 !src/notebooks/

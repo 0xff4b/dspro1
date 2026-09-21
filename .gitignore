@@ -123,3 +123,8 @@ cache/
 
 # Local Azure credentials
 .azure-local/
+
+# Local setup downloads and non-destructive recovery copies
+.setup-cache/
+.setup-backups/
+.venv.backup-*/
