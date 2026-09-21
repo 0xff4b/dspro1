@@ -120,3 +120,6 @@ tmp/
 temp/
 cache/
 .cache/
+
+# Local Azure credentials
+.azure-local/

@@ -131,3 +131,7 @@ make notebook-fix     # python fix_summary_blocks.py — Post-Cleanup-Regression
 - Co-Autor: Timo Schlumpf
 - Status: Final (Abgabe-Stand)
 - Lizenz: tbd (akademisches Projekt)
+
+## Azure-Prototyp mit Docker
+
+Bereitstellung, automatischer GitHub-Upload sowie Start/Stopp/Löschen: [Azure-Anleitung](docs/AZURE.md).

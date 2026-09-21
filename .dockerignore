@@ -1,0 +1,14 @@
+# Allowlist: no credentials, notebooks, raw scraped data or local environments.
+**
+!Dockerfile
+!requirements-app.txt
+!src/
+!src/app.py
+!src/notebooks/
+!src/notebooks/models/
+!src/notebooks/models/*.joblib
+!src/external-sources/
+!src/external-sources/output_csv/
+!src/external-sources/output_csv/model.csv
+# Incomplete export: missing fitted geo transformer; cannot predict.
+src/notebooks/models/gradient_boosting_all_geo.joblib
